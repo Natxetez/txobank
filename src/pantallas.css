@@ -1,0 +1,128 @@
+/* Inicio, presupuestos, fijos, estadísticas y recomendaciones (fases 4 a 7). */
+
+.enlace { color: var(--principal); text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+.enlace-boton { border: 0; background: transparent; color: var(--principal); font: inherit; text-decoration: underline; min-height: 44px; }
+.boton-enlace { display: flex; align-items: center; justify-content: center; text-decoration: none; text-align: center; }
+.aviso-texto { color: var(--aviso); margin: 4px 0; }
+.bloque { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.bloque h2 { margin: 0; font-size: 1rem; }
+.bloque-cab { display: flex; align-items: center; justify-content: space-between; }
+.cifra-grande { margin: 0; font: 700 1.8rem var(--fuente-cifras); font-variant-numeric: tabular-nums; }
+.pantalla.inicio { gap: 20px; }
+
+.ojo { width: 44px; height: 44px; border: 0; background: transparent; font-size: 1.2rem; }
+.selector-mes { gap: 4px; }
+.selector-mes h1 { flex: 1; text-align: center; }
+
+/* Cifra protagonista de Inicio */
+.protagonista {
+  width: 100%;
+  padding: 20px 16px 16px;
+  border-radius: 20px;
+  background: var(--superficie);
+  border: 2px solid var(--borde);
+  text-align: center;
+}
+.protagonista.bien { border-color: var(--principal); }
+.protagonista.ajustado { border-color: var(--aviso); }
+.protagonista.pasado { border-color: var(--peligro); }
+.protagonista p { margin: 0; }
+.etiqueta-grande { font-size: 0.95rem; color: var(--secundario); }
+.cifra-enorme { font: 700 3rem/1.1 var(--fuente-cifras); font-variant-numeric: tabular-nums; }
+.por-dia { margin-top: 4px !important; color: var(--secundario); }
+.estado-texto { margin: 8px 0 12px !important; font-weight: 600; }
+.protagonista.bien .estado-texto { color: var(--principal); }
+.protagonista.ajustado .estado-texto { color: var(--aviso); }
+.protagonista.pasado .estado-texto, .protagonista.pasado .cifra-enorme { color: var(--peligro); }
+
+.barra-gasto { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--fondo); }
+.tramo.fijo, .punto.fijo { background: var(--principal); }
+.tramo.variable, .punto.variable { background: var(--laton); }
+.leyenda-barra { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; margin-top: 8px; font-size: 0.8rem; }
+.leyenda-barra .punto { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+
+.tarjeta-revision {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--laton);
+  color: #1c2a22;
+  text-decoration: none;
+}
+.tarjeta-revision .secundario { color: rgba(28, 42, 34, 0.75); }
+
+/* Barras por categoría */
+.barras-cat { display: flex; flex-direction: column; gap: 12px; color: inherit; text-decoration: none; }
+.barra-cat-cab { display: flex; justify-content: space-between; gap: 8px; font-size: 0.9rem; margin-bottom: 4px; }
+.barra-fondo { display: block; height: 10px; border-radius: 5px; background: var(--borde); overflow: hidden; }
+.barra-fondo > span { display: block; height: 100%; border-radius: 5px; background: var(--principal); }
+.barra-cat.aviso .barra-fondo > span { background: var(--aviso); }
+.barra-cat.superado .barra-fondo > span { background: var(--peligro); }
+.aviso-suma { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--superficie); border-left: 4px solid var(--aviso); font-size: 0.9rem; }
+.alcance { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.alcance legend { color: var(--secundario); font-size: 0.9rem; padding: 0; margin-bottom: 4px; }
+
+.saldo-total { background: var(--superficie); border-radius: 14px; font-weight: 600; }
+
+/* Fijos */
+.resumen-fijos { margin: 0; font-size: 1rem; }
+.zona-borrar { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.pausado { opacity: 0.55; }
+.fijo .fila:disabled { color: inherit; opacity: 1; cursor: default; }
+.estado-fijo { width: 28px; text-align: center; font-size: 1.1rem; flex: none; }
+.fijo.pagado .estado-fijo { color: var(--principal); }
+.fijo.esperado .estado-fijo { color: var(--aviso); }
+.fijo.esperado { background: color-mix(in srgb, var(--aviso) 10%, transparent); }
+.fijo.omitido { opacity: 0.55; }
+.acciones-fijo { display: flex; align-items: center; gap: 8px; padding: 0 16px 8px 56px; }
+.acciones-fijo .chip { min-height: 40px; }
+
+/* Recomendaciones */
+.reco { width: 100%; padding: 12px 14px; border-radius: 14px; background: var(--superficie); border-left: 4px solid var(--principal); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.reco.aviso { border-left-color: var(--aviso); }
+.reco.logro { border-left-color: var(--laton); }
+.reco h3 { margin: 0; font-size: 1rem; }
+.reco p { margin: 0; }
+.reco-cab { display: flex; width: 100%; align-items: center; justify-content: space-between; }
+
+/* Estadísticas */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+.tile { padding: 12px; border-radius: 14px; background: var(--superficie); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile .cifra { font-size: 1.25rem; }
+.variacion { font-size: 0.75rem; }
+.variacion.buena { color: var(--principal); }
+.variacion.mala { color: var(--aviso); }
+.grafico { padding: 14px 12px; border-radius: 16px; background: var(--superficie); }
+.alto-grafico { width: 100%; height: 220px; }
+.alto-grafico.corto { height: 180px; }
+.leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 0; font-size: 0.75rem; color: var(--secundario); }
+.leyenda .l::before { content: ''; display: inline-block; width: 14px; height: 0; border-top: 3px solid currentColor; margin-right: 6px; vertical-align: middle; }
+.l-real { color: var(--principal); }
+.l-media { color: var(--secundario); }
+.l-proy::before { border-top-style: dashed !important; }
+.l-proy { color: var(--principal); }
+.l-limite { color: var(--peligro); }
+.l-fijo { color: var(--principal); }
+.l-variable { color: var(--laton); }
+.l-ahorro { color: var(--texto); }
+
+.barras-h { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.barra-h { width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; display: flex; flex-direction: column; gap: 4px; min-height: 44px; }
+.barra-h:disabled { cursor: default; }
+.barra-h-cab { display: flex; justify-content: space-between; gap: 8px; }
+
+.calendario { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.dia-cal { aspect-ratio: 1; min-height: 40px; border: 0; border-radius: 8px; background: var(--borde); color: var(--texto); font-size: 0.8rem; }
+.dia-cal.n1 { background: color-mix(in srgb, var(--laton) 30%, var(--superficie)); }
+.dia-cal.n2 { background: color-mix(in srgb, var(--laton) 55%, var(--superficie)); }
+.dia-cal.n3 { background: color-mix(in srgb, var(--laton) 80%, var(--superficie)); }
+.dia-cal.n4 { background: var(--laton); color: #1c2a22; font-weight: 700; }
+.dia-cal.n0:not(.futuro) { background: color-mix(in srgb, var(--principal) 22%, var(--superficie)); }
+.dia-cal.futuro { opacity: 0.4; }
+.dia-cal.elegido { outline: 2px solid var(--texto); }
+
+/* Avisos */
+.aviso.destacado { background: var(--aviso); color: #1c2a22; }
+.aviso.destacado button { color: #1c2a22; }

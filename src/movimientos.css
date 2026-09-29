@@ -1,0 +1,161 @@
+/* Hoja de nuevo movimiento, lista de movimientos y avisos (fase 3). */
+
+.segmentado { display: flex; background: var(--superficie); border-radius: 12px; padding: 4px; gap: 4px; }
+.segmentado button {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--secundario);
+}
+.segmentado button.activa { background: var(--principal); color: var(--sobre-principal); font-weight: 600; }
+
+.importe-grande {
+  min-height: 72px;
+  text-align: center;
+  font: 700 2.4rem var(--fuente-cifras);
+  font-variant-numeric: tabular-nums;
+}
+
+.chips, .frecuentes { display: flex; flex-wrap: wrap; gap: 8px; }
+.frecuentes { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+.frecuentes .chip { flex: none; }
+
+.chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--borde);
+  border-radius: 22px;
+  background: var(--superficie);
+  color: var(--texto);
+}
+.chip.activo { background: var(--principal); border-color: var(--principal); color: var(--sobre-principal); font-weight: 600; }
+.chip.nueva { border-style: dashed; color: var(--principal); }
+
+.mini-form { display: flex; gap: 8px; margin-top: 4px; }
+.mini-form input { flex: 1; min-width: 0; }
+.mini-form input.emoji { flex: none; width: 64px; text-align: center; }
+
+.linea, .dos-columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.linea .campo, .dos-columnas .campo { min-width: 0; }
+
+.concepto { position: relative; }
+.sugerencias {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+}
+.sugerencias button {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--texto);
+  text-align: left;
+}
+
+.confirmar { display: flex; align-items: center; gap: 8px; }
+.confirmar span { flex: 1; }
+.peligro {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--peligro);
+  color: #fff;
+  font-weight: 600;
+}
+.secundario-btn.borrar { color: var(--peligro); }
+
+/* Lista de movimientos */
+.selector-mes { display: flex; align-items: center; justify-content: space-between; }
+.selector-mes h1 { margin: 0; font-size: 1.3rem; text-transform: capitalize; }
+.selector-mes button {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--principal);
+  font-size: 1.6rem;
+}
+
+input[type='search'] { width: 100%; }
+
+.filtros { width: 100%; }
+.filtros summary { min-height: 44px; display: flex; align-items: center; color: var(--principal); cursor: pointer; }
+.filtros-campos { display: flex; flex-direction: column; gap: 8px; }
+
+.dia { width: 100%; }
+.dia-cab { display: flex; justify-content: space-between; align-items: baseline; margin: 8px 4px 6px; }
+.dia-cab h2 { margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--secundario); }
+.dia-cab h2::first-letter { text-transform: uppercase; }
+
+.icono-cat {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 1.1rem;
+  color: #fff;
+}
+.positivo { color: var(--principal); }
+.etiqueta {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-size: 0.7rem;
+  color: var(--secundario);
+}
+.vacio { margin: 24px 0; text-align: center; color: var(--secundario); width: 100%; }
+
+.deslizable { position: relative; overflow: hidden; }
+.deslizable-borrar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 88px;
+  border: 0;
+  background: var(--peligro);
+  color: #fff;
+  font-weight: 600;
+}
+.deslizable-contenido { position: relative; background: var(--superficie); transition: transform 0.15s; touch-action: pan-y; }
+.deslizable .fila { justify-content: flex-start; }
+.deslizable .fila .cifra { margin-left: auto; }
+
+/* Aviso */
+.aviso {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 72px);
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 32px);
+  max-width: 488px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 14px;
+  background: var(--texto);
+  color: var(--fondo);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.aviso span { flex: 1; }
+.aviso button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--laton);
+  font-weight: 700;
+}

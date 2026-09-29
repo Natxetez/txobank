@@ -1,0 +1,79 @@
+import { lazy, Suspense } from 'react'
+import { NavLink, Route, Routes } from 'react-router-dom'
+import { AvisosProvider } from '../components/Avisos'
+import { MovimientoProvider, useHojaMovimiento } from '../components/ContextoMovimiento'
+import { useMovimientos } from '../data/hooks'
+import { hoyISO, sumarDias } from '../lib/meses'
+import { Ajustes } from './ajustes/Ajustes'
+import { AjustesAhorro } from './ajustes/AjustesAhorro'
+import { AjustesCategorias } from './ajustes/AjustesCategorias'
+import { AjustesCuentas } from './ajustes/AjustesCuentas'
+import { AjustesFijos } from './ajustes/AjustesFijos'
+import { FijosMes } from './FijosMes'
+import { Inicio } from './Inicio'
+import { Movimientos } from './Movimientos'
+import { Presupuestos } from './Presupuestos'
+import { Recomendaciones } from './Recomendaciones'
+import { Revision } from './Revision'
+
+// Los gráficos (Recharts) pesan bastante: se cargan solo al entrar en Estadísticas.
+const Estadisticas = lazy(() => import('./Estadisticas'))
+const CategoriaDetalle = lazy(() => import('./CategoriaDetalle'))
+
+function NoEncontrado() {
+  return (
+    <section className="pantalla">
+      <h1>No encontrado</h1>
+      <p className="secundario">Esta pantalla no existe.</p>
+    </section>
+  )
+}
+
+function Estructura() {
+  const hoja = useHojaMovimiento()
+  // Se cargan ya los últimos 90 días para que la hoja de nuevo movimiento abra con frecuentes y sugerencias.
+  const hoy = hoyISO()
+  useMovimientos(sumarDias(hoy, -90), hoy)
+
+  return (
+    <div className="shell">
+      <div className="contenido">
+        <Suspense fallback={<p className="secundario">Cargando…</p>}>
+          <Routes>
+            <Route path="/" element={<Inicio />} />
+            <Route path="/movimientos" element={<Movimientos />} />
+            <Route path="/fijos" element={<FijosMes />} />
+            <Route path="/presupuestos" element={<Presupuestos />} />
+            <Route path="/recomendaciones" element={<Recomendaciones />} />
+            <Route path="/revision/:mes" element={<Revision />} />
+            <Route path="/estadisticas" element={<Estadisticas />} />
+            <Route path="/estadisticas/categoria/:id" element={<CategoriaDetalle />} />
+            <Route path="/ajustes" element={<Ajustes />} />
+            <Route path="/ajustes/cuentas" element={<AjustesCuentas />} />
+            <Route path="/ajustes/categorias" element={<AjustesCategorias />} />
+            <Route path="/ajustes/fijos" element={<AjustesFijos />} />
+            <Route path="/ajustes/ahorro" element={<AjustesAhorro />} />
+            <Route path="*" element={<NoEncontrado />} />
+          </Routes>
+        </Suspense>
+      </div>
+      <nav className="barra" aria-label="Principal">
+        <NavLink to="/" end>Inicio</NavLink>
+        <NavLink to="/movimientos">Movimientos</NavLink>
+        <button className="mas" aria-label="Nuevo movimiento" onClick={() => hoja.abrirNuevo()}>+</button>
+        <NavLink to="/estadisticas">Estadísticas</NavLink>
+        <NavLink to="/ajustes">Ajustes</NavLink>
+      </nav>
+    </div>
+  )
+}
+
+export function Shell() {
+  return (
+    <AvisosProvider>
+      <MovimientoProvider>
+        <Estructura />
+      </MovimientoProvider>
+    </AvisosProvider>
+  )
+}
