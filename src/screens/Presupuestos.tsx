@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { SelectorMes } from '../components/SelectorMes'
 import { useFmt } from '../components/Discreto'
 import { Hoja } from '../components/Hoja'
 import { useAccionesPresupuestos, usePresupuestos, useTodosMovimientos } from '../data/consultas'
 import { mensajeError, useCategorias } from '../data/hooks'
 import type { Mes, Presupuesto } from '../data/types'
 import { aTextoEditable, parseImporte } from '../lib/dinero'
-import { etiquetaMes, mesActual, nombreMes, sumarMeses } from '../lib/meses'
+import { mesActual, nombreMes } from '../lib/meses'
 import { excesoSobreTotal, presupuestoVigente, sugerirDesdeMedia } from '../lib/presupuestos'
 import type { Alcance } from '../lib/presupuestos'
 
@@ -207,15 +208,7 @@ export function Presupuestos() {
 
   return (
     <section className="pantalla ancho">
-      <div className="selector-mes">
-        <button aria-label="Mes anterior" onClick={() => setMes(sumarMeses(mes, -1))}>
-          ‹
-        </button>
-        <h1>{etiquetaMes(mes)}</h1>
-        <button aria-label="Mes siguiente" onClick={() => setMes(sumarMeses(mes, 1))}>
-          ›
-        </button>
-      </div>
+      <SelectorMes mes={mes} onCambiar={setMes} />
       <p className="secundario pequeno">
         El presupuesto total incluye los gastos fijos. Cada mes hereda el del anterior si no lo cambias.
       </p>

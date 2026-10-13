@@ -1,7 +1,8 @@
-import { lazy, Suspense } from 'react'
-import { NavLink, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { AvisosProvider } from '../components/Avisos'
 import { MovimientoProvider, useHojaMovimiento } from '../components/ContextoMovimiento'
+import { Icono } from '../components/Icono'
 import { useMovimientos } from '../data/hooks'
 import { hoyISO, sumarDias } from '../lib/meses'
 import { Ajustes } from './ajustes/Ajustes'
@@ -31,6 +32,11 @@ function NoEncontrado() {
 
 function Estructura() {
   const hoja = useHojaMovimiento()
+  const { pathname } = useLocation()
+  // Cada pantalla empieza arriba del todo.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
   // Se cargan ya los últimos 90 días para que la hoja de nuevo movimiento abra con frecuentes y sugerencias.
   const hoy = hoyISO()
   useMovimientos(sumarDias(hoy, -90), hoy)
@@ -58,11 +64,25 @@ function Estructura() {
         </Suspense>
       </div>
       <nav className="barra" aria-label="Principal">
-        <NavLink to="/" end>Inicio</NavLink>
-        <NavLink to="/movimientos">Movimientos</NavLink>
-        <button className="mas" aria-label="Nuevo movimiento" onClick={() => hoja.abrirNuevo()}>+</button>
-        <NavLink to="/estadisticas">Estadísticas</NavLink>
-        <NavLink to="/ajustes">Ajustes</NavLink>
+        <NavLink to="/" end>
+          <Icono nombre="inicio" />
+          Inicio
+        </NavLink>
+        <NavLink to="/movimientos">
+          <Icono nombre="movimientos" />
+          Movimientos
+        </NavLink>
+        <button className="mas" aria-label="Nuevo movimiento" onClick={() => hoja.abrirNuevo()}>
+          <Icono nombre="mas" />
+        </button>
+        <NavLink to="/estadisticas">
+          <Icono nombre="estadisticas" />
+          Estadísticas
+        </NavLink>
+        <NavLink to="/ajustes">
+          <Icono nombre="ajustes" />
+          Ajustes
+        </NavLink>
       </nav>
     </div>
   )

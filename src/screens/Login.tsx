@@ -26,6 +26,7 @@ export function Login() {
     <main className="login">
       <div className="logo" aria-hidden="true">T</div>
       <h1>TxoBank</h1>
+      <p className="lema">Tu mes, bajo control.</p>
       <form onSubmit={enviar} className="login-form">
         <label>
           Usuario

@@ -7,9 +7,6 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { SesionProvider } from './data/SesionContext'
 import { App } from './App'
 import './styles.css'
-import './componentes.css'
-import './movimientos.css'
-import './pantallas.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,6 +1,6 @@
 // Gastos fijos (SPEC.md, sección 7): qué toca cada mes, su estado, coste y cómo se convierte un pago en movimiento.
-import type { Fecha, Fijo, Mes, Movimiento, NuevoFijo, NuevoMovimiento } from '../data/types'
-import { diaDeFecha, diferenciaMeses, fechaEnMes, mesDeFecha, sumarMeses } from './meses'
+import type { Fecha, Fijo, FijoFecha, Mes, Movimiento, NuevoFijo, NuevoMovimiento } from '../data/types'
+import { diaDeFecha, diasEntre, diferenciaMeses, fechaEnMes, mesDeFecha, sumarDias, sumarMeses } from './meses'
 
 export const PERIODICIDADES = [
   { valor: 1, etiqueta: 'Mensual' },
@@ -10,14 +10,21 @@ export const PERIODICIDADES = [
   { valor: 12, etiqueta: 'Anual' },
 ]
 
-export const etiquetaPeriodicidad = (cadaMeses: number) =>
-  PERIODICIDADES.find((p) => p.valor === cadaMeses)?.etiqueta ?? `Cada ${cadaMeses} meses`
+/** Cargo puntual ("Una vez"): toca solo en un mes, el primero y el último a la vez. */
+export const esPuntual = (f: Pick<Fijo, 'desde' | 'hasta'>) => f.hasta !== null && f.hasta === f.desde
 
-/** Coste mensual equivalente: importe / cada_meses. */
-export const costeMensual = (f: Pick<Fijo, 'importe' | 'cadaMeses'>) => Math.round(f.importe / f.cadaMeses)
+export const etiquetaPeriodicidad = (f: Pick<Fijo, 'cadaMeses' | 'desde' | 'hasta'>) =>
+  esPuntual(f)
+    ? 'Una vez'
+    : (PERIODICIDADES.find((p) => p.valor === f.cadaMeses)?.etiqueta ?? `Cada ${f.cadaMeses} meses`)
 
-/** Coste anual: importe × 12 / cada_meses. */
-export const costeAnual = (f: Pick<Fijo, 'importe' | 'cadaMeses'>) => Math.round((f.importe * 12) / f.cadaMeses)
+type Coste = Pick<Fijo, 'importe' | 'cadaMeses' | 'desde' | 'hasta'>
+
+/** Coste mensual equivalente: importe / cada_meses. Un cargo puntual no es un coste que se repita: 0. */
+export const costeMensual = (f: Coste) => (esPuntual(f) ? 0 : Math.round(f.importe / f.cadaMeses))
+
+/** Coste anual: importe × 12 / cada_meses. Un cargo puntual: 0. */
+export const costeAnual = (f: Coste) => (esPuntual(f) ? 0 : Math.round((f.importe * 12) / f.cadaMeses))
 
 /** ¿Toca este fijo en ese mes? Según activo, desde, hasta y periodicidad. */
 export function tocaEnMes(f: Fijo, mes: Mes): boolean {
@@ -28,8 +35,13 @@ export function tocaEnMes(f: Fijo, mes: Mes): boolean {
   return desdeInicio % f.cadaMeses === 0
 }
 
-/** Fecha aproximada del cargo en ese mes (el día se ajusta si el mes es más corto). */
-export const fechaEsperada = (f: Pick<Fijo, 'diaMes'>, mes: Mes): Fecha => fechaEnMes(mes, f.diaMes)
+/**
+ * Fecha del cargo en ese mes: la fijada para ese mes, si la hay; si no, el día habitual
+ * (ajustado si el mes es más corto).
+ */
+export function fechaEsperada(f: Pick<Fijo, 'id' | 'diaMes'>, mes: Mes, fechas: FijoFecha[] = []): Fecha {
+  return fechas.find((x) => x.fijoId === f.id && x.mes === mes)?.fecha ?? fechaEnMes(mes, f.diaMes)
+}
 
 /** Primer mes en o después de `desdeMes` en que toca, o null si está pausado o ya terminó. */
 export function proximoMesQueToca(f: Fijo, desdeMes: Mes, limiteMeses = 60): Mes | null {
@@ -48,6 +60,8 @@ export interface FijoDelMes {
   /** Movimiento del pago, si está pagado. */
   pago: Movimiento | null
   fechaEsperada: Fecha
+  /** La fecha de este mes se ha cambiado a mano (no es la del día habitual). */
+  fechaCambiada: boolean
 }
 
 const ORDEN_ESTADO: Record<EstadoFijo, number> = { esperado: 0, pendiente: 1, pagado: 2, omitido: 3 }
@@ -63,18 +77,20 @@ export function fijosDelMes(
   pagos: Movimiento[],
   omitidos: { fijoId: string; mes: Mes }[],
   hoy: Fecha,
+  fechas: FijoFecha[] = [],
 ): FijoDelMes[] {
   const resultado: FijoDelMes[] = []
   for (const fijo of fijos) {
     const pago = pagos.find((p) => p.fijoId === fijo.id && p.fijoMes === mes) ?? null
     const toca = tocaEnMes(fijo, mes)
     if (!toca && !pago) continue
-    const esperada = fechaEsperada(fijo, mes)
+    const esperada = fechaEsperada(fijo, mes, fechas)
+    const fechaCambiada = fechas.some((x) => x.fijoId === fijo.id && x.mes === mes)
     let estado: EstadoFijo
     if (pago) estado = 'pagado'
     else if (omitidos.some((o) => o.fijoId === fijo.id && o.mes === mes)) estado = 'omitido'
     else estado = esperada < hoy ? 'esperado' : 'pendiente'
-    resultado.push({ fijo, estado, pago, fechaEsperada: esperada })
+    resultado.push({ fijo, estado, pago, fechaEsperada: esperada, fechaCambiada })
   }
   return resultado.sort(
     (a, b) =>
@@ -113,6 +129,47 @@ export function previstoPendiente(items: FijoDelMes[], tipo: Fijo['tipo']): numb
     .reduce((t, i) => t + i.fijo.importe, 0)
 }
 
+export interface CargoProximo extends FijoDelMes {
+  /** Mes del fijo al que corresponde el cargo (puede ser el siguiente al de hoy). */
+  mes: Mes
+  /** Días que faltan hasta la fecha del cargo; negativo si ya debería haberse cobrado. */
+  dias: number
+}
+
+/**
+ * Cargos que se acercan: fijos pendientes del mes de hoy y del siguiente cuya fecha cae en los
+ * próximos `ventana` días, más los del mes de hoy que ya deberían haberse cobrado. Por fecha.
+ */
+export function proximosCargos(
+  fijos: Fijo[],
+  pagos: Movimiento[],
+  omitidos: { fijoId: string; mes: Mes }[],
+  fechas: FijoFecha[],
+  hoy: Fecha,
+  ventana = 7,
+): CargoProximo[] {
+  const limite = sumarDias(hoy, ventana)
+  const mesHoy = mesDeFecha(hoy)
+  const resultado: CargoProximo[] = []
+  for (const mes of [mesHoy, sumarMeses(mesHoy, 1)]) {
+    for (const item of fijosDelMes(fijos, mes, pagos, omitidos, hoy, fechas)) {
+      if (item.estado !== 'pendiente' && item.estado !== 'esperado') continue
+      if (item.fechaEsperada > limite) continue
+      resultado.push({ ...item, mes, dias: diasEntre(hoy, item.fechaEsperada) })
+    }
+  }
+  return resultado.sort((a, b) => a.dias - b.dias || a.fijo.nombre.localeCompare(b.fijo.nombre, 'es'))
+}
+
+/** "Hoy", "Mañana", "En 3 días", "Hace 2 días" para un cargo próximo. */
+export function textoDias(dias: number): string {
+  if (dias === 0) return 'Hoy'
+  if (dias === 1) return 'Mañana'
+  if (dias > 1) return `En ${dias} días`
+  if (dias === -1) return 'Ayer'
+  return `Hace ${-dias} días`
+}
+
 /** Movimiento que se crea al marcar un fijo como pagado (o cobrado, o hecho). */
 export function movimientoDePago(
   fijo: Fijo,
@@ -131,6 +188,7 @@ export function movimientoDePago(
     cuentaDestinoId: esTraspaso ? fijo.cuentaDestinoId : null,
     categoriaId: esTraspaso ? null : fijo.categoriaId,
     nota: fijo.nombre,
+    descripcion: fijo.descripcion,
     fijoId: fijo.id,
     fijoMes: mes,
     mesImputado: imputable ? mes : null,
@@ -141,7 +199,7 @@ export function movimientoDePago(
 export function fijoDesdeMovimiento(
   m: Pick<
     NuevoMovimiento,
-    'tipo' | 'importe' | 'fecha' | 'cuentaId' | 'cuentaDestinoId' | 'categoriaId' | 'mesImputado'
+    'tipo' | 'importe' | 'fecha' | 'cuentaId' | 'cuentaDestinoId' | 'categoriaId' | 'mesImputado' | 'descripcion'
   >,
   nombre: string,
 ): { fijo: NuevoFijo; mes: Mes } | null {
@@ -151,6 +209,7 @@ export function fijoDesdeMovimiento(
     mes,
     fijo: {
       nombre: nombre.trim(),
+      descripcion: m.descripcion.trim(),
       tipo: m.tipo,
       importe: m.importe,
       cuentaId: m.cuentaId,

@@ -51,6 +51,13 @@ export function sumarDias(fecha: Fecha, n: number): Fecha {
   return hoyISO(new Date(a, m - 1, d + n))
 }
 
+/** Días de `desde` a `hasta` (negativo si `hasta` es anterior). */
+export function diasEntre(desde: Fecha, hasta: Fecha): number {
+  const [a1, m1, d1] = partes(desde)
+  const [a2, m2, d2] = partes(hasta)
+  return Math.round((Date.UTC(a2, m2 - 1, d2) - Date.UTC(a1, m1 - 1, d1)) / 86400000)
+}
+
 /** Último día del mes: `2026-02-01` → `2026-02-28`. */
 export function finDeMes(mes: Mes): Fecha {
   const [a, m] = partes(mes)

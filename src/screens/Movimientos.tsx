@@ -1,9 +1,11 @@
+import { SelectorMes } from '../components/SelectorMes'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAviso } from '../components/Avisos'
 import { BotonDiscreto, useFmt } from '../components/Discreto'
 import { useHojaMovimiento } from '../components/ContextoMovimiento'
 import { FilaDeslizable } from '../components/FilaDeslizable'
+import { Icono, IconoCategoria } from '../components/Icono'
 import {
   mensajeError,
   useAccionesMovimiento,
@@ -13,7 +15,7 @@ import {
   useSaldos,
 } from '../data/hooks'
 import type { Movimiento, TipoMovimiento } from '../data/types'
-import { etiquetaMes, finDeMes, formatoDia, mesActual, nombreMes, sumarMeses } from '../lib/meses'
+import { finDeMes, formatoDia, mesActual, nombreMes } from '../lib/meses'
 import { agruparPorDia, filtrarMovimientos } from '../lib/movimientos'
 
 const SIGNO: Record<TipoMovimiento, string> = { gasto: '−', ingreso: '+', devolucion: '+', traspaso: '' }
@@ -89,14 +91,15 @@ export function Movimientos() {
     return (
       <li key={m.id}>
         <FilaDeslizable onTocar={() => hoja.abrirEditar(m)} onEliminar={() => void eliminar(m)} etiquetaEliminar="Eliminar">
-          <span className="icono-cat" style={{ background: cat?.color ?? 'var(--secundario)' }} aria-hidden="true">
-            {cat?.icono ?? (m.tipo === 'traspaso' ? '⇄' : '•')}
-          </span>
+          <IconoCategoria color={cat?.color}>
+            {cat?.icono ?? <Icono nombre={m.tipo === 'traspaso' ? 'traspaso' : 'etiqueta'} />}
+          </IconoCategoria>
           <span className="fila-texto">
             <span>
               {titulo}
               {m.fijoId && <span className="etiqueta">Fijo</span>}
             </span>
+            {m.descripcion && <span className="secundario pequeno descripcion">{m.descripcion}</span>}
             <span className="secundario pequeno">{[detalle, imputado].filter(Boolean).join(' · ')}</span>
           </span>
           <span className={positivo ? 'cifra positivo' : 'cifra'}>
@@ -110,21 +113,14 @@ export function Movimientos() {
 
   return (
     <section className="pantalla ancho">
-      <div className="selector-mes">
-        <button aria-label="Mes anterior" onClick={() => setMes(sumarMeses(mes, -1))}>
-          ‹
-        </button>
-        <h1>{etiquetaMes(mes)}</h1>
-        <button aria-label="Mes siguiente" onClick={() => setMes(sumarMeses(mes, 1))}>
-          ›
-        </button>
+      <SelectorMes mes={mes} onCambiar={setMes}>
         <BotonDiscreto />
-      </div>
+      </SelectorMes>
 
       <input
         type="search"
-        placeholder="Buscar en los conceptos"
-        aria-label="Buscar en los conceptos"
+        placeholder="Buscar en conceptos y descripciones"
+        aria-label="Buscar en conceptos y descripciones"
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
       />

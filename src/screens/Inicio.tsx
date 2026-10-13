@@ -1,7 +1,10 @@
+import { SelectorMes } from '../components/SelectorMes'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BotonDiscreto, useFmt } from '../components/Discreto'
+import { Icono, IconoCategoria } from '../components/Icono'
 import { ListaFijos } from '../components/ListaFijos'
+import { ProximosCargos } from '../components/ProximosCargos'
 import { TarjetaRecomendacion } from '../components/TarjetaRecomendacion'
 import { useControlMes, useTodosMovimientos } from '../data/consultas'
 import { useCategorias, useCuentas, useSaldos } from '../data/hooks'
@@ -10,18 +13,19 @@ import type { Movimiento } from '../data/types'
 import { progresoPresupuestos } from '../lib/control'
 import type { Control } from '../lib/control'
 import { resumenFijos } from '../lib/fijos'
-import { etiquetaMes, hoyISO, mesActual, mesDeFecha, nombreMes, sumarMeses } from '../lib/meses'
+import { hoyISO, mesActual, mesDeFecha, nombreMes, sumarMeses } from '../lib/meses'
 import { mediaMensual } from '../lib/presupuestos'
 import { mesDeCuenta } from '../lib/control'
 import { useHojaMovimiento } from '../components/ContextoMovimiento'
 
-const TEXTO_ESTADO = { bien: 'Vas bien', ajustado: 'Vas ajustado', pasado: 'Te has pasado' } as const
+const TEXTO_ESTADO = { bien: 'Vas bien', ajustado: 'Vas ajustado', pasado: 'Te pasas' } as const
 
 function Protagonista({ control, mediaTres }: { control: Control; mediaTres: number | null }) {
   const fmt = useFmt()
-  const { limite, disponible, estado, disponiblePorDia, diasQueQuedan, resumen } = control
+  const { limite, disponible, disponibleSinPendientes, estado, disponiblePorDia, diasQueQuedan, resumen, fijosGastoPendiente } =
+    control
 
-  if (!limite || disponible === null || estado === null) {
+  if (!limite || disponible === null || disponibleSinPendientes === null || estado === null) {
     return (
       <div className="protagonista neutro">
         <p className="etiqueta-grande">Gasto de este mes</p>
@@ -35,19 +39,29 @@ function Protagonista({ control, mediaTres }: { control: Control; mediaTres: num
     )
   }
 
+  // La cifra grande no cuenta los fijos pendientes (no cuentan hasta que se cobran); el estado y el
+  // "al día" sí, para no llevarse sorpresas.
+  const pasado = disponibleSinPendientes < 0
   const fraccionFijo = limite.valor > 0 ? Math.min(1, resumen.gastoFijo / limite.valor) : 0
   const fraccionVariable = limite.valor > 0 ? Math.min(1 - fraccionFijo, Math.max(0, resumen.gastoVariable) / limite.valor) : 0
 
   return (
     <div className={`protagonista ${estado}`}>
-      <p className="etiqueta-grande">{estado === 'pasado' ? 'Te has pasado' : 'Te quedan'}</p>
-      <p className="cifra-enorme">{fmt(Math.abs(disponible))}</p>
-      {estado !== 'pasado' && disponiblePorDia !== null && diasQueQuedan > 0 && (
+      <p className="estado-texto">{TEXTO_ESTADO[estado]}</p>
+      <p className="etiqueta-grande">{pasado ? 'Te has pasado' : 'Te quedan'}</p>
+      <p className="cifra-enorme">{fmt(Math.abs(disponibleSinPendientes))}</p>
+      {disponible >= 0 && disponiblePorDia !== null && diasQueQuedan > 0 && (
         <p className="por-dia">
           {fmt(Math.round(disponiblePorDia))} al día durante {diasQueQuedan} {diasQueQuedan === 1 ? 'día' : 'días'}
         </p>
       )}
-      <p className="estado-texto">{TEXTO_ESTADO[estado]}</p>
+      {fijosGastoPendiente > 0 && (
+        <p className="tras-pendientes">
+          {disponible >= 0
+            ? `Tras los cargos pendientes: ${fmt(disponible)}`
+            : `Con los cargos pendientes te pasarás ${fmt(-disponible)}`}
+        </p>
+      )}
       <div className="barra-gasto" role="img" aria-label={`Gastado ${fmt(resumen.gastoNeto)} de ${fmt(limite.valor)}`}>
         <span className="tramo fijo" style={{ width: `${fraccionFijo * 100}%` }} />
         <span className="tramo variable" style={{ width: `${fraccionVariable * 100}%` }} />
@@ -59,7 +73,7 @@ function Protagonista({ control, mediaTres }: { control: Control; mediaTres: num
         <span>
           <i className="punto variable" /> Variable {fmt(resumen.gastoVariable)}
         </span>
-        <span className="secundario">Límite {fmt(limite.valor)}</span>
+        <span>Límite {fmt(limite.valor)}</span>
       </div>
     </div>
   )
@@ -98,16 +112,9 @@ export function Inicio() {
 
   return (
     <section className="pantalla ancho inicio">
-      <div className="selector-mes">
-        <button aria-label="Mes anterior" onClick={() => setMes(sumarMeses(mes, -1))}>
-          ‹
-        </button>
-        <h1>{etiquetaMes(mes)}</h1>
-        <button aria-label="Mes siguiente" onClick={() => setMes(sumarMeses(mes, 1))}>
-          ›
-        </button>
+      <SelectorMes mes={mes} onCambiar={setMes}>
         <BotonDiscreto />
-      </div>
+      </SelectorMes>
 
       {cargando && <p className="secundario">Cargando…</p>}
       {error && (
@@ -120,6 +127,8 @@ export function Inicio() {
         <>
           <Protagonista control={datos.control} mediaTres={mediaTres} />
 
+          {esMesActual && <ProximosCargos />}
+
           {!hayMovimientosEnElMes && (
             <p className="vacio">
               Aún no hay gastos en {nombreMes(mes)}.{' '}
@@ -131,8 +140,14 @@ export function Inicio() {
 
           {revisionPendiente && (
             <Link to={`/revision/${mesAnterior.slice(0, 7)}`} className="tarjeta-revision">
-              <strong>Tu resumen de {nombreMes(mesAnterior)}</strong>
-              <span className="secundario">Cómo fue el mes, qué ajustar y qué revisar ›</span>
+              <IconoCategoria>
+                <Icono nombre="resumen" />
+              </IconoCategoria>
+              <span className="fila-texto">
+                <strong>Tu resumen de {nombreMes(mesAnterior)}</strong>
+                <span className="secundario">Cómo fue el mes, qué ajustar y qué revisar</span>
+              </span>
+              <Icono nombre="derecha" className="chevron" />
             </Link>
           )}
 
@@ -200,7 +215,7 @@ export function Inicio() {
         <button className="fila saldo-total" aria-expanded={verCuentas} onClick={() => setVerCuentas(!verCuentas)}>
           <span>Saldo total</span>
           <span className="cifra">
-            {fmt(saldoTotal)} {verCuentas ? '▴' : '▾'}
+            {fmt(saldoTotal)} <Icono nombre={verCuentas ? 'arriba' : 'abajo'} className="chevron" />
           </span>
         </button>
         {verCuentas && (
@@ -237,11 +252,12 @@ export function Inicio() {
               return (
                 <li key={m.id}>
                   <button className="fila" onClick={() => hoja.abrirEditar(m)}>
-                    <span className="icono-cat" style={{ background: c?.color ?? 'var(--secundario)' }} aria-hidden="true">
-                      {c?.icono ?? (m.tipo === 'traspaso' ? '⇄' : '•')}
-                    </span>
+                    <IconoCategoria color={c?.color}>
+                      {c?.icono ?? <Icono nombre={m.tipo === 'traspaso' ? 'traspaso' : 'etiqueta'} />}
+                    </IconoCategoria>
                     <span className="fila-texto">
                       <span>{m.nota || c?.nombre || 'Traspaso'}</span>
+                      {m.descripcion && <span className="secundario pequeno descripcion">{m.descripcion}</span>}
                       <span className="secundario pequeno">{m.fecha.slice(8)}/{m.fecha.slice(5, 7)}</span>
                     </span>
                     <span className={positivo ? 'cifra positivo' : 'cifra'}>

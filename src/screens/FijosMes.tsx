@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListaFijos } from '../components/ListaFijos'
+import { SelectorMes } from '../components/SelectorMes'
 import { useFmt } from '../components/Discreto'
 import { useControlMes } from '../data/consultas'
 import { resumenFijos } from '../lib/fijos'
-import { etiquetaMes, mesActual, sumarMeses } from '../lib/meses'
+import { etiquetaMes, mesActual } from '../lib/meses'
 
 /** Fijos de un mes: qué toca, qué está pagado y qué falta. */
 export function FijosMes() {
@@ -16,15 +17,7 @@ export function FijosMes() {
 
   return (
     <section className="pantalla ancho">
-      <div className="selector-mes">
-        <button aria-label="Mes anterior" onClick={() => setMes(sumarMeses(mes, -1))}>
-          ‹
-        </button>
-        <h1>Fijos de {etiquetaMes(mes)}</h1>
-        <button aria-label="Mes siguiente" onClick={() => setMes(sumarMeses(mes, 1))}>
-          ›
-        </button>
-      </div>
+      <SelectorMes mes={mes} onCambiar={setMes} titulo={`Fijos de ${etiquetaMes(mes)}`} />
       {cargando && <p className="secundario">Cargando…</p>}
       {error && (
         <p className="error" role="alert">

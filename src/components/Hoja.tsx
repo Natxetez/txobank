@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
+import { Icono } from './Icono'
 
 interface Props {
   titulo: string
@@ -21,7 +22,7 @@ export function Hoja({ titulo, onCerrar, children }: Props) {
         <div className="hoja-cab">
           <h2>{titulo}</h2>
           <button type="button" className="cerrar" aria-label="Cerrar" onClick={onCerrar}>
-            ✕
+            <Icono nombre="cerrar" />
           </button>
         </div>
         {children}

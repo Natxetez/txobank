@@ -1,9 +1,12 @@
-// Genera los iconos PNG (una "T" latón sobre verde botella) sin dependencias.
+// Genera los iconos PNG (una "T" blanca sobre degradado menta, con un punto ámbar) sin dependencias.
 import { deflateSync } from 'node:zlib'
 import { writeFileSync } from 'node:fs'
 
-const GREEN = [0x2f, 0x6b, 0x4f]
-const BRASS = [0xc4, 0x9a, 0x3a]
+const MENTA = [0x14, 0xb8, 0x85]
+const VERDE = [0x06, 0x61, 0x47]
+const BLANCO = [0xff, 0xff, 0xff]
+const AMBAR = [0xff, 0xb5, 0x47]
+const mezcla = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t)
 
 function crc32(buf) {
   let c, crc = 0xffffffff
@@ -25,20 +28,32 @@ function chunk(type, data) {
 }
 
 function png(size) {
-  // T en cuadrícula 0..1; el margen deja la T dentro de la zona segura maskable.
-  const bar = { x0: 0.26, x1: 0.74, y0: 0.24, y1: 0.36 }
-  const stem = { x0: 0.44, x1: 0.56, y0: 0.24, y1: 0.76 }
+  // Formas en cuadrícula 0..1; el margen deja la T dentro de la zona segura maskable.
+  const bar = { x0: 0.27, x1: 0.73, y0: 0.25, y1: 0.37 }
+  const stem = { x0: 0.44, x1: 0.56, y0: 0.25, y1: 0.75 }
+  const punto = { cx: 0.7, cy: 0.69, r: 0.065 }
   const inside = (r, x, y) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1
+  const color = (x, y) => {
+    if (inside(bar, x, y) || inside(stem, x, y)) return BLANCO
+    if ((x - punto.cx) ** 2 + (y - punto.cy) ** 2 <= punto.r ** 2) return AMBAR
+    return mezcla(MENTA, VERDE, Math.min(1, (x + y) / 2))
+  }
+  // Supermuestreo 4×4 para suavizar los bordes.
+  const S = 4
   const rows = []
   for (let py = 0; py < size; py++) {
     const row = Buffer.alloc(1 + size * 3)
     for (let px = 0; px < size; px++) {
-      const x = (px + 0.5) / size
-      const y = (py + 0.5) / size
-      const c = inside(bar, x, y) || inside(stem, x, y) ? BRASS : GREEN
-      row[1 + px * 3] = c[0]
-      row[2 + px * 3] = c[1]
-      row[3 + px * 3] = c[2]
+      const suma = [0, 0, 0]
+      for (let sy = 0; sy < S; sy++) {
+        for (let sx = 0; sx < S; sx++) {
+          const c = color((px + (sx + 0.5) / S) / size, (py + (sy + 0.5) / S) / size)
+          suma[0] += c[0]
+          suma[1] += c[1]
+          suma[2] += c[2]
+        }
+      }
+      for (let k = 0; k < 3; k++) row[1 + px * 3 + k] = Math.round(suma[k] / (S * S))
     }
     rows.push(row)
   }

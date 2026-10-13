@@ -1,5 +1,5 @@
 // Control del mes (SPEC.md, sección 6): gasto neto, fijo y variable, límite, disponible y estado.
-import type { Ajustes, Categoria, Fijo, FijoOmitido, Mes, Movimiento, Presupuesto } from '../data/types'
+import type { Ajustes, Categoria, Fijo, FijoFecha, FijoOmitido, Mes, Movimiento, Presupuesto } from '../data/types'
 import { fijosDelMes, previstoPendiente, resumenFijos } from './fijos'
 import type { FijoDelMes } from './fijos'
 import { diaDeFecha, diasDelMes, mesDeFecha } from './meses'
@@ -90,6 +90,8 @@ export interface EntradaControl {
   fijos: Fijo[]
   pagos: Movimiento[]
   omitidos: FijoOmitido[]
+  /** Fechas de cargo cambiadas a mano para un mes concreto. */
+  fechas?: FijoFecha[]
 }
 
 export interface Control {
@@ -104,6 +106,12 @@ export interface Control {
   fijosGastoPendiente: number
   /** Fijos de gasto del mes: lo pagado de verdad más lo previsto de los pendientes. */
   fijosGastoTotal: number
+  /**
+   * Lo que queda sin contar los fijos de gasto pendientes: límite − gasto neto. Es la cifra grande
+   * de Inicio; los pendientes no cuentan hasta que se cobran.
+   */
+  disponibleSinPendientes: number | null
+  /** Lo que queda tras los fijos de gasto pendientes (cifra prudente): de aquí salen el estado y el "al día". */
   disponible: number | null
   /** Días del mes que quedan, incluido hoy (0 si el mes ya pasó). */
   diasQueQuedan: number
@@ -116,7 +124,7 @@ export interface Control {
 
 export function calcularControl(e: EntradaControl): Control {
   const resumen = resumenMes(e.movimientos, e.mes)
-  const fijosMes = fijosDelMes(e.fijos, e.mes, e.pagos, e.omitidos, e.hoy)
+  const fijosMes = fijosDelMes(e.fijos, e.mes, e.pagos, e.omitidos, e.hoy, e.fechas)
   const presupuestoTotal = presupuestoVigente(e.presupuestos, e.mes, null).importe
   const ingresosPrevistos = resumen.ingresos + previstoPendiente(fijosMes, 'ingreso')
   const objetivo = objetivoAhorro(e.ajustes, ingresosPrevistos)
@@ -129,12 +137,14 @@ export function calcularControl(e: EntradaControl): Control {
   const diasQueQuedan = e.mes < mesHoy ? 0 : e.mes > mesHoy ? total : total - diaDeFecha(e.hoy) + 1
   const diasTranscurridos = e.mes < mesHoy ? total : e.mes > mesHoy ? 0 : diaDeFecha(e.hoy)
 
+  let disponibleSinPendientes: number | null = null
   let disponible: number | null = null
   let disponiblePorDia: number | null = null
   let ritmoPrevisto: number | null = null
   let estado: EstadoMes | null = null
   if (limite) {
-    disponible = limite.valor - resumen.gastoNeto - fijosGastoPendiente
+    disponibleSinPendientes = limite.valor - resumen.gastoNeto
+    disponible = disponibleSinPendientes - fijosGastoPendiente
     disponiblePorDia = diasQueQuedan > 0 ? disponible / diasQueQuedan : null
     ritmoPrevisto = (limite.valor - fijosGastoTotal) / total
     if (disponible < 0) estado = 'pasado'
@@ -152,6 +162,7 @@ export function calcularControl(e: EntradaControl): Control {
     limite,
     fijosGastoPendiente,
     fijosGastoTotal,
+    disponibleSinPendientes,
     disponible,
     diasQueQuedan,
     diasTranscurridos,

@@ -2,16 +2,16 @@ import type { NuevaCategoria, TipoCuenta } from '../data/types'
 
 /** 10 colores armónicos con la paleta de la app, asignados en orden al crear (SPEC.md, sección 12). */
 export const PALETA = [
-  '#2F6B4F',
-  '#C49A3A',
-  '#4F7CAC',
-  '#B5483B',
-  '#7A5C9E',
-  '#D9822B',
-  '#3E8E8E',
-  '#8A6F4E',
-  '#6F8F3A',
-  '#A0527A',
+  '#12B886',
+  '#4C6EF5',
+  '#F59F00',
+  '#E64980',
+  '#7950F2',
+  '#15AABF',
+  '#F76707',
+  '#82C91E',
+  '#FA5252',
+  '#868E96',
 ]
 
 export const colorPorPosicion = (n: number) => PALETA[n % PALETA.length]

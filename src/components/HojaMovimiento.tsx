@@ -83,6 +83,7 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
     base.cuentaDestinoId ?? cuentasActivas.find((c) => c.id !== (base.cuentaId ?? cuentaPorDefecto()))?.id ?? '',
   )
   const [nota, setNota] = useState(base.nota ?? '')
+  const [descripcion, setDescripcion] = useState(base.descripcion ?? '')
   const [imputar, setImputar] = useState<Imputar>(() => {
     if (!base.mesImputado || !base.fecha) return 'propio'
     const propio = mesDeFecha(base.fecha)
@@ -187,6 +188,7 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
       cuentaDestinoId: esTraspaso ? destinoId || null : null,
       categoriaId: esTraspaso ? null : categoriaId,
       nota: nota.trim(),
+      descripcion: descripcion.trim(),
       mesImputado,
     }
     const fallo = validarMovimiento(datos)
@@ -423,6 +425,16 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
             </ul>
           )}
         </div>
+
+        <label className="campo">
+          Descripción (opcional)
+          <textarea
+            rows={2}
+            value={descripcion}
+            placeholder="Detalles que quieras recordar"
+            onChange={(e) => setDescripcion(e.target.value)}
+          />
+        </label>
 
         {!editando && tipoMov !== 'devolucion' && (
           <label className="casilla">

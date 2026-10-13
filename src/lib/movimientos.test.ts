@@ -24,6 +24,7 @@ function mov(parcial: Partial<Movimiento>): Movimiento {
     cuentaDestinoId: null,
     categoriaId: 'comida',
     nota: '',
+    descripcion: '',
     fijoId: null,
     fijoMes: null,
     mesImputado: null,
@@ -241,7 +242,7 @@ describe('agruparPorDia', () => {
 describe('filtrarMovimientos', () => {
   const movs = [
     mov({ nota: 'Café', cuentaId: 'a', categoriaId: 'comida' }),
-    mov({ nota: 'Cine', cuentaId: 'b', categoriaId: 'ocio' }),
+    mov({ nota: 'Cine', descripcion: 'Estreno con Ana', cuentaId: 'b', categoriaId: 'ocio' }),
     mov({ nota: 'Ahorro', tipo: 'traspaso', cuentaId: 'a', cuentaDestinoId: 'b', categoriaId: null }),
   ]
 
@@ -254,6 +255,7 @@ describe('filtrarMovimientos', () => {
     expect(filtrarMovimientos(movs, { categoriaId: 'ocio' })).toHaveLength(1)
     expect(filtrarMovimientos(movs, { tipo: 'traspaso' })).toHaveLength(1)
     expect(filtrarMovimientos(movs, { texto: 'CAFE' })).toHaveLength(1)
+    expect(filtrarMovimientos(movs, { texto: 'estreno' })).toHaveLength(1)
   })
 
   it('combina filtros y sin filtros devuelve todo', () => {

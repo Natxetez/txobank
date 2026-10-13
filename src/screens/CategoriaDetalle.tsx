@@ -1,3 +1,4 @@
+import { Icono } from '../components/Icono'
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -31,7 +32,8 @@ export default function CategoriaDetalle() {
   return (
     <section className="pantalla ancho">
       <Link to="/estadisticas" className="volver">
-        ‹ Estadísticas
+        <Icono nombre="izquierda" />
+        Estadísticas
       </Link>
       <h1>
         {categoria?.icono ? `${categoria.icono} ` : ''}

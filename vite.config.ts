@@ -27,8 +27,8 @@ export default defineConfig(({ mode }) => {
           start_url: '/txobank/',
           scope: '/txobank/',
           display: 'standalone',
-          background_color: '#F1F4F0',
-          theme_color: '#2F6B4F',
+          background_color: '#F3F7F5',
+          theme_color: '#0B8A64',
           icons: [
             { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
             { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },

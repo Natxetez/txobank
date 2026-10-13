@@ -1,3 +1,4 @@
+import { Icono } from '../components/Icono'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -275,7 +276,7 @@ export default function Estadisticas() {
               <YAxis tick={EJE} tickLine={false} axisLine={false} tickFormatter={eje} width={44} />
               <Tooltip formatter={tip} labelFormatter={(m) => etiquetaMes(String(m))} contentStyle={{ background: 'var(--superficie)', border: '1px solid var(--borde)', borderRadius: 10 }} />
               <Bar dataKey="gastoFijo" name="Fijo" stackId="g" fill="var(--principal)" />
-              <Bar dataKey="gastoVariable" name="Variable" stackId="g" fill="var(--laton)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="gastoVariable" name="Variable" stackId="g" fill="var(--acento)" radius={[4, 4, 0, 0]} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -334,7 +335,7 @@ export default function Estadisticas() {
               <Tooltip formatter={tip} labelFormatter={(m) => etiquetaMes(String(m))} contentStyle={{ background: 'var(--superficie)', border: '1px solid var(--borde)', borderRadius: 10 }} />
               <ReferenceLine y={0} stroke="var(--borde)" />
               <Bar dataKey="ingresos" name="Ingresos" fill="var(--principal)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="gastoNeto" name="Gasto neto" fill="var(--laton)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="gastoNeto" name="Gasto neto" fill="var(--acento)" radius={[4, 4, 0, 0]} />
               <Line type="monotone" dataKey="ahorro" name="Ahorro" stroke="var(--texto)" strokeWidth={2} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -384,7 +385,7 @@ export default function Estadisticas() {
               <li key={m}>
                 <Link className="fila" to={`/revision/${m.slice(0, 7)}`}>
                   <span className="fila-texto">{etiquetaMes(m)}</span>
-                  <span className="secundario">›</span>
+                  <Icono nombre="derecha" className="chevron" />
                 </Link>
               </li>
             ))}

@@ -16,6 +16,7 @@ function mov(p: Partial<Movimiento>): Movimiento {
     cuentaDestinoId: null,
     categoriaId: 'comida',
     nota: '',
+    descripcion: '',
     fijoId: null,
     fijoMes: null,
     mesImputado: null,
@@ -44,6 +45,7 @@ function fijo(p: Partial<Fijo> = {}): Fijo {
   return {
     id: 'f1',
     nombre: 'Alquiler',
+    descripcion: '',
     tipo: 'gasto',
     importe: 60000,
     cuentaId: 'c1',
@@ -141,6 +143,7 @@ describe('calcularControl', () => {
     const c = calcularControl(entrada({ movimientos: [mov({ importe: 5000 })] }))
     expect(c.limite).toBeNull()
     expect(c.disponible).toBeNull()
+    expect(c.disponibleSinPendientes).toBeNull()
     expect(c.estado).toBeNull()
     expect(c.resumen.gastoNeto).toBe(5000)
   })
@@ -156,6 +159,8 @@ describe('calcularControl', () => {
     expect(c.limite).toEqual({ valor: 120000, origen: 'presupuesto' })
     expect(c.fijosGastoPendiente).toBe(60000)
     expect(c.disponible).toBe(30000)
+    // La cifra grande de Inicio no cuenta los fijos pendientes hasta que se cobran.
+    expect(c.disponibleSinPendientes).toBe(90000)
   })
 
   it('un fijo pagado ya está en el gasto neto y no se descuenta dos veces', () => {

@@ -10,6 +10,7 @@ import type {
   Cuenta,
   DataSource,
   Fijo,
+  FijoFecha,
   FijoOmitido,
   Movimiento,
   Presupuesto,
@@ -34,20 +35,22 @@ export function crearMemoriaDataSource(): DataSource {
   const azar = aleatorio(7)
 
   const cuentas: Cuenta[] = [
-    { id: 'c-nomina', nombre: 'Cuenta nómina', tipo: 'corriente', saldoInicial: 120000, color: '#2F6B4F', orden: 0, archivada: false },
-    { id: 'c-ahorro', nombre: 'Ahorro', tipo: 'ahorro', saldoInicial: 500000, color: '#4F7CAC', orden: 1, archivada: false },
-    { id: 'c-efectivo', nombre: 'Efectivo', tipo: 'efectivo', saldoInicial: 6000, color: '#C49A3A', orden: 2, archivada: false },
+    { id: 'c-nomina', nombre: 'Cuenta nómina', tipo: 'corriente', saldoInicial: 120000, color: '#12B886', orden: 0, archivada: false },
+    { id: 'c-ahorro', nombre: 'Ahorro', tipo: 'ahorro', saldoInicial: 500000, color: '#4C6EF5', orden: 1, archivada: false },
+    { id: 'c-efectivo', nombre: 'Efectivo', tipo: 'efectivo', saldoInicial: 6000, color: '#F59F00', orden: 2, archivada: false },
   ]
 
   const categorias: Categoria[] = categoriasPorDefecto().map((c) => ({ ...c, id: `cat-${c.tipo}-${c.nombre.toLowerCase().replace(/\s+/g, '-')}` }))
   const cat = (nombre: string) => categorias.find((c) => c.nombre === nombre)!.id
 
   const fijos: Fijo[] = [
-    { id: 'f-alquiler', nombre: 'Alquiler', tipo: 'gasto', importe: 60000, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Casa'), diaMes: 5, cadaMeses: 1, desde: sumarMeses(mes, -6), hasta: null, activo: true },
-    { id: 'f-luz', nombre: 'Luz', tipo: 'gasto', importe: 7000, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Casa'), diaMes: 15, cadaMeses: 1, desde: sumarMeses(mes, -6), hasta: null, activo: true },
-    { id: 'f-netflix', nombre: 'Netflix', tipo: 'gasto', importe: 1500, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Suscripciones'), diaMes: 10, cadaMeses: 1, desde: sumarMeses(mes, -6), hasta: null, activo: true },
-    { id: 'f-seguro', nombre: 'Seguro del coche', tipo: 'gasto', importe: 36000, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Transporte'), diaMes: 20, cadaMeses: 12, desde: sumarMeses(mes, -3), hasta: null, activo: true },
-    { id: 'f-nomina', nombre: 'Nómina', tipo: 'ingreso', importe: 200000, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Nómina'), diaMes: 27, cadaMeses: 1, desde: sumarMeses(mes, -6), hasta: null, activo: true },
+    { id: 'f-alquiler', nombre: 'Alquiler', descripcion: 'Transferencia al casero', tipo: 'gasto', importe: 60000, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Casa'), diaMes: 5, cadaMeses: 1, desde: sumarMeses(mes, -6), hasta: null, activo: true },
+    { id: 'f-luz', nombre: 'Luz', descripcion: 'Iberdrola, tarifa fija', tipo: 'gasto', importe: 7000, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Casa'), diaMes: 15, cadaMeses: 1, desde: sumarMeses(mes, -6), hasta: null, activo: true },
+    { id: 'f-netflix', nombre: 'Netflix', descripcion: '', tipo: 'gasto', importe: 1500, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Suscripciones'), diaMes: 10, cadaMeses: 1, desde: sumarMeses(mes, -6), hasta: null, activo: true },
+    { id: 'f-seguro', nombre: 'Seguro del coche', descripcion: '', tipo: 'gasto', importe: 36000, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Transporte'), diaMes: 20, cadaMeses: 12, desde: sumarMeses(mes, -3), hasta: null, activo: true },
+    { id: 'f-nomina', nombre: 'Nómina', descripcion: '', tipo: 'ingreso', importe: 200000, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Nómina'), diaMes: 27, cadaMeses: 1, desde: sumarMeses(mes, -6), hasta: null, activo: true },
+    // Cargo puntual (periodicidad "Una vez"): desde = hasta.
+    { id: 'f-itv', nombre: 'ITV', descripcion: 'Estación de Getafe, cita a las 9:30', tipo: 'gasto', importe: 4200, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Transporte'), diaMes: Math.min(28, Number(hoy.slice(8)) + 4), cadaMeses: 1, desde: mes, hasta: mes, activo: true },
   ]
 
   const movimientos: Movimiento[] = []
@@ -57,6 +60,7 @@ export function crearMemoriaDataSource(): DataSource {
       cuentaDestinoId: null,
       categoriaId: null,
       nota: '',
+      descripcion: '',
       fijoId: null,
       fijoMes: null,
       mesImputado: null,
@@ -64,6 +68,7 @@ export function crearMemoriaDataSource(): DataSource {
     })
 
   const omitidos: FijoOmitido[] = []
+  const fechas: FijoFecha[] = []
 
   // Cuatro meses de historia y lo que va del mes actual.
   for (let i = 4; i >= 0; i--) {
@@ -89,7 +94,7 @@ export function crearMemoriaDataSource(): DataSource {
       if (r > 0.85) anadir({ tipo: 'gasto', importe: 1500 + Math.round(azar() * 3500), fecha: f(d), cuentaId: 'c-nomina', categoriaId: cat('Ocio'), nota: r > 0.93 ? 'Cine' : 'Cena' })
       if (r > 0.9 && r < 0.95) anadir({ tipo: 'gasto', importe: 800 + Math.round(azar() * 900), fecha: f(d), cuentaId: 'c-nomina', categoriaId: cat('Transporte'), nota: 'Gasolina' })
     }
-    if (i === 2) anadir({ tipo: 'gasto', importe: 8900, fecha: f(12), cuentaId: 'c-nomina', categoriaId: cat('Salud'), nota: 'Dentista' })
+    if (i === 2) anadir({ tipo: 'gasto', importe: 8900, fecha: f(12), cuentaId: 'c-nomina', categoriaId: cat('Salud'), nota: 'Dentista', descripcion: 'Limpieza y revisión anual' })
     if (i === 1) anadir({ tipo: 'devolucion', importe: 2000, fecha: f(18), cuentaId: 'c-nomina', categoriaId: cat('Compras'), nota: 'Devolución zapatillas' })
   }
 
@@ -102,7 +107,7 @@ export function crearMemoriaDataSource(): DataSource {
 
   // Con ?vacio en la dirección se empieza sin datos, para probar el asistente de primera vez.
   if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('vacio')) {
-    for (const lista of [cuentas, categorias, fijos, movimientos, presupuestos, omitidos] as unknown[][]) lista.length = 0
+    for (const lista of [cuentas, categorias, fijos, movimientos, presupuestos, omitidos, fechas] as unknown[][]) lista.length = 0
     ajustes = { ahorroTipo: null, ahorroValor: null }
   }
 
@@ -227,6 +232,7 @@ export function crearMemoriaDataSource(): DataSource {
           if (m.fijoId === id) movimientos[k] = { ...m, fijoId: null }
         })
         for (let k = omitidos.length - 1; k >= 0; k--) if (omitidos[k].fijoId === id) omitidos.splice(k, 1)
+        for (let k = fechas.length - 1; k >= 0; k--) if (fechas[k].fijoId === id) fechas.splice(k, 1)
       },
       async listarOmitidos() {
         return [...omitidos]
@@ -237,6 +243,18 @@ export function crearMemoriaDataSource(): DataSource {
       async quitarOmision(fijoId, m) {
         const i = omitidos.findIndex((o) => o.fijoId === fijoId && o.mes === m)
         if (i !== -1) omitidos.splice(i, 1)
+      },
+      async listarFechas() {
+        return [...fechas]
+      },
+      async fijarFecha(fijoId, m, fecha) {
+        const i = fechas.findIndex((x) => x.fijoId === fijoId && x.mes === m)
+        if (i === -1) fechas.push({ fijoId, mes: m, fecha })
+        else fechas[i] = { fijoId, mes: m, fecha }
+      },
+      async quitarFecha(fijoId, m) {
+        const i = fechas.findIndex((x) => x.fijoId === fijoId && x.mes === m)
+        if (i !== -1) fechas.splice(i, 1)
       },
     },
     presupuestos: {

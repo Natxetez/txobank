@@ -25,6 +25,7 @@ function mov(p: Partial<Movimiento>): Movimiento {
     cuentaDestinoId: null,
     categoriaId: 'comida',
     nota: '',
+    descripcion: '',
     fijoId: null,
     fijoMes: null,
     mesImputado: null,
@@ -36,6 +37,7 @@ function fijo(p: Partial<Fijo> = {}): Fijo {
   return {
     id: 'f1',
     nombre: 'Luz',
+    descripcion: '',
     tipo: 'gasto',
     importe: 7000,
     cuentaId: 'c1',

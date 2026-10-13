@@ -22,6 +22,7 @@ function mov(p: Partial<Movimiento>): Movimiento {
     cuentaDestinoId: null,
     categoriaId: 'comida',
     nota: '',
+    descripcion: '',
     fijoId: null,
     fijoMes: null,
     mesImputado: null,
@@ -54,7 +55,7 @@ describe('movimientosACsv', () => {
         mov({ fecha: '2026-09-12', nota: 'Café; con leche' }),
         mov({ fecha: '2026-09-01', tipo: 'ingreso', importe: 200000, categoriaId: 'nomina', fecha_: undefined } as Partial<Movimiento>),
         mov({ fecha: '2026-09-05', tipo: 'traspaso', categoriaId: null, cuentaDestinoId: 'c2' }),
-        mov({ fecha: '2026-09-06', fijoId: 'f1', fijoMes: '2026-09-01', nota: 'Alquiler' }),
+        mov({ fecha: '2026-09-06', fijoId: 'f1', fijoMes: '2026-09-01', nota: 'Alquiler', descripcion: 'Transferencia' }),
         mov({ fecha: '2026-08-29', tipo: 'ingreso', categoriaId: 'nomina', mesImputado: '2026-09-01' }),
       ],
       cuentas,
@@ -64,10 +65,10 @@ describe('movimientosACsv', () => {
     const lineas = csv.trimEnd().split('\r\n')
     expect(lineas[0]).toBe(CABECERA_CSV.join(';'))
     expect(lineas.map((l) => l.slice(0, 10)).slice(1)).toEqual(['2026-08-29', '2026-09-01', '2026-09-05', '2026-09-06', '2026-09-12'])
-    expect(lineas[1]).toBe('2026-08-29;ingreso;12,50;Nómina;;Nómina;;;2026-09')
-    expect(lineas[3]).toBe('2026-09-05;traspaso;12,50;Nómina;Ahorro;;;;')
-    expect(lineas[4]).toBe('2026-09-06;gasto;12,50;Nómina;;Comida;Alquiler;Alquiler;')
-    expect(lineas[5]).toBe('2026-09-12;gasto;12,50;Nómina;;Comida;"Café; con leche";;')
+    expect(lineas[1]).toBe('2026-08-29;ingreso;12,50;Nómina;;Nómina;;;;2026-09')
+    expect(lineas[3]).toBe('2026-09-05;traspaso;12,50;Nómina;Ahorro;;;;;')
+    expect(lineas[4]).toBe('2026-09-06;gasto;12,50;Nómina;;Comida;Alquiler;Transferencia;Alquiler;')
+    expect(lineas[5]).toBe('2026-09-12;gasto;12,50;Nómina;;Comida;"Café; con leche";;;')
   })
 
   it('con BOM para Excel', () => {

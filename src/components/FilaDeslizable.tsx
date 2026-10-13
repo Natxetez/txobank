@@ -20,7 +20,7 @@ export function FilaDeslizable({ children, onTocar, onEliminar, etiquetaEliminar
   const limitar = (n: number) => Math.max(-ANCHO_BOTON, Math.min(0, n))
 
   return (
-    <div className="deslizable">
+    <div className={desplazamiento < 0 ? 'deslizable moviendo' : 'deslizable'}>
       <button type="button" className="deslizable-borrar" tabIndex={abierta ? 0 : -1} onClick={onEliminar}>
         {etiquetaEliminar}
       </button>

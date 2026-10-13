@@ -30,6 +30,7 @@ function mov(p: Partial<Movimiento>): Movimiento {
     cuentaDestinoId: null,
     categoriaId: 'comida',
     nota: '',
+    descripcion: '',
     fijoId: null,
     fijoMes: null,
     mesImputado: null,

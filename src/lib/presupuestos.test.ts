@@ -121,6 +121,7 @@ describe('sugerencias desde la media', () => {
     cuentaDestinoId: null,
     categoriaId,
     nota: '',
+    descripcion: '',
     fijoId: null,
     fijoMes: null,
     mesImputado: null,

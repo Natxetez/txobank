@@ -4,6 +4,7 @@ import { useAccionesPresupuestos, usePresupuestos } from '../data/consultas'
 import { mensajeError } from '../data/hooks'
 import type { Recomendacion } from '../lib/recomendaciones'
 import { hoyISO, mesDeFecha } from '../lib/meses'
+import { Icono } from './Icono'
 
 interface Props {
   recomendacion: Recomendacion
@@ -35,11 +36,11 @@ export function TarjetaRecomendacion({ recomendacion: r, onDescartar }: Props) {
   }
 
   return (
-    <article className={`reco ${r.tipo}`}>
+    <article className={`reco reco-${r.tipo}`}>
       <div className="reco-cab">
         <h3>{r.titulo}</h3>
         <button type="button" className="cerrar" aria-label="Descartar hasta el mes que viene" onClick={onDescartar}>
-          ✕
+          <Icono nombre="cerrar" />
         </button>
       </div>
       <p>{r.texto}</p>

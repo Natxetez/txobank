@@ -1,7 +1,7 @@
 // Exportación a CSV (SPEC.md, sección 14): separador ";", decimales con coma, UTF-8 con BOM.
 import type { Categoria, Cuenta, Fijo, Movimiento } from '../data/types'
 
-export const CABECERA_CSV = ['fecha', 'tipo', 'importe', 'cuenta', 'cuenta_destino', 'categoria', 'concepto', 'fijo', 'cuenta_para_mes']
+export const CABECERA_CSV = ['fecha', 'tipo', 'importe', 'cuenta', 'cuenta_destino', 'categoria', 'concepto', 'descripcion', 'fijo', 'cuenta_para_mes']
 
 /** 1250 → "12,50" (siempre con dos decimales, sin símbolo). */
 export function importeCsv(centimos: number): string {
@@ -35,6 +35,7 @@ export function movimientosACsv(
       cuenta(m.cuentaDestinoId),
       categoria(m.categoriaId),
       m.nota,
+      m.descripcion,
       fijo(m.fijoId),
       m.mesImputado ? m.mesImputado.slice(0, 7) : '',
     ]

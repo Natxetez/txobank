@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { formatEuros } from '../lib/dinero'
+import { Icono } from './Icono'
 
 const CLAVE = 'txobank.discreto'
 
@@ -52,7 +53,7 @@ export function BotonDiscreto() {
       aria-label={oculto ? 'Mostrar importes' : 'Ocultar importes'}
       onClick={alternar}
     >
-      {oculto ? '🙈' : '👁'}
+      <Icono nombre={oculto ? 'ojoTachado' : 'ojo'} />
     </button>
   )
 }

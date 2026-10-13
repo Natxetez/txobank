@@ -50,7 +50,10 @@ export interface Movimiento {
   cuentaId: string
   cuentaDestinoId: string | null
   categoriaId: string | null
+  /** Concepto corto ("Mercadona"): se autocompleta y sirve para detectar frecuentes. */
   nota: string
+  /** Texto libre opcional, aparte del concepto. */
+  descripcion: string
   fijoId: string | null
   fijoMes: Mes | null
   mesImputado: Mes | null
@@ -59,6 +62,8 @@ export interface Movimiento {
 export interface Fijo {
   id: string
   nombre: string
+  /** Texto libre opcional; pasa al movimiento al marcarlo como pagado. */
+  descripcion: string
   tipo: 'gasto' | 'ingreso' | 'traspaso'
   importe: number
   cuentaId: string
@@ -150,6 +155,13 @@ export interface FijoOmitido {
   mes: Mes
 }
 
+/** Fecha de cargo de un fijo en un mes concreto, cuando no es la del día habitual. */
+export interface FijoFecha {
+  fijoId: string
+  mes: Mes
+  fecha: Fecha
+}
+
 export interface FijosApi {
   listar(): Promise<Fijo[]>
   crear(fijo: NuevoFijo): Promise<Fijo>
@@ -159,6 +171,10 @@ export interface FijosApi {
   listarOmitidos(): Promise<FijoOmitido[]>
   omitir(fijoId: string, mes: Mes): Promise<void>
   quitarOmision(fijoId: string, mes: Mes): Promise<void>
+  listarFechas(): Promise<FijoFecha[]>
+  /** Fija (upsert) la fecha de cargo de un fijo en un mes; la fecha cae dentro de ese mes. */
+  fijarFecha(fijoId: string, mes: Mes, fecha: Fecha): Promise<void>
+  quitarFecha(fijoId: string, mes: Mes): Promise<void>
 }
 
 export interface PresupuestosApi {

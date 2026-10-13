@@ -8,6 +8,7 @@ import type {
   Cuenta,
   CuentasApi,
   Fijo,
+  FijoFecha,
   FijoOmitido,
   FijosApi,
   NuevoFijo,
@@ -214,6 +215,7 @@ interface FilaMovimiento {
   cuenta_destino_id: string | null
   categoria_id: string | null
   nota: string
+  descripcion: string
   fijo_id: string | null
   fijo_mes: string | null
   mes_imputado: string | null
@@ -228,6 +230,7 @@ const aMovimiento = (f: FilaMovimiento): Movimiento => ({
   cuentaDestinoId: f.cuenta_destino_id,
   categoriaId: f.categoria_id,
   nota: f.nota,
+  descripcion: f.descripcion ?? '',
   fijoId: f.fijo_id,
   fijoMes: f.fijo_mes,
   mesImputado: f.mes_imputado,
@@ -242,6 +245,7 @@ function aFilaMovimiento(m: Partial<NuevoMovimiento>): Record<string, unknown> {
   if (m.cuentaDestinoId !== undefined) f.cuenta_destino_id = m.cuentaDestinoId
   if (m.categoriaId !== undefined) f.categoria_id = m.categoriaId
   if (m.nota !== undefined) f.nota = m.nota
+  if (m.descripcion !== undefined) f.descripcion = m.descripcion
   if (m.fijoId !== undefined) f.fijo_id = m.fijoId
   if (m.fijoMes !== undefined) f.fijo_mes = m.fijoMes
   if (m.mesImputado !== undefined) f.mes_imputado = m.mesImputado
@@ -251,12 +255,28 @@ function aFilaMovimiento(m: Partial<NuevoMovimiento>): Record<string, unknown> {
 /** Supabase devuelve como máximo 1000 filas por consulta, así que se pide por páginas. */
 const TAMANO_PAGINA = 1000
 
+/**
+ * Pide todas las filas de una consulta, página a página. `consulta` recibe el rango (ambos incluidos)
+ * y debe llevar un orden estable (con `id` al final) para que las páginas no se solapen.
+ */
+async function paginar<T>(
+  consulta: (inicio: number, fin: number) => PromiseLike<{ data: unknown; error: ErrorPg | null }>,
+): Promise<T[]> {
+  const todas: T[] = []
+  for (let inicio = 0; ; inicio += TAMANO_PAGINA) {
+    const { data, error } = await consulta(inicio, inicio + TAMANO_PAGINA - 1)
+    comprobar(error)
+    const pagina = (data ?? []) as T[]
+    todas.push(...pagina)
+    if (pagina.length < TAMANO_PAGINA) return todas
+  }
+}
+
 export function crearMovimientosApi(client: SupabaseClient): MovimientosApi {
   return {
     async listar(desde, hasta) {
-      const todas: FilaMovimiento[] = []
-      for (let inicio = 0; ; inicio += TAMANO_PAGINA) {
-        const { data, error } = await client
+      const filas = await paginar<FilaMovimiento>((inicio, fin) =>
+        client
           .from('movimientos')
           .select('*')
           .gte('fecha', desde)
@@ -264,13 +284,9 @@ export function crearMovimientosApi(client: SupabaseClient): MovimientosApi {
           .order('fecha', { ascending: false })
           .order('creado', { ascending: false })
           .order('id')
-          .range(inicio, inicio + TAMANO_PAGINA - 1)
-        comprobar(error)
-        const pagina = data as FilaMovimiento[]
-        todas.push(...pagina)
-        if (pagina.length < TAMANO_PAGINA) break
-      }
-      return todas.map(aMovimiento)
+          .range(inicio, fin),
+      )
+      return filas.map(aMovimiento)
     },
     async crear(movimiento) {
       const { data, error } = await client.from('movimientos').insert(aFilaMovimiento(movimiento)).select().single()
@@ -292,16 +308,18 @@ export function crearMovimientosApi(client: SupabaseClient): MovimientosApi {
       comprobar(error)
     },
     async listarPagosFijos(desde, hasta) {
-      const { data, error } = await client
-        .from('movimientos')
-        .select('*')
-        .not('fijo_id', 'is', null)
-        .gte('fijo_mes', desde)
-        .lte('fijo_mes', hasta)
-        .order('fecha', { ascending: false })
-        .limit(TAMANO_PAGINA)
-      comprobar(error)
-      return (data as FilaMovimiento[]).map(aMovimiento)
+      const filas = await paginar<FilaMovimiento>((inicio, fin) =>
+        client
+          .from('movimientos')
+          .select('*')
+          .not('fijo_id', 'is', null)
+          .gte('fijo_mes', desde)
+          .lte('fijo_mes', hasta)
+          .order('fecha', { ascending: false })
+          .order('id')
+          .range(inicio, fin),
+      )
+      return filas.map(aMovimiento)
     },
   }
 }
@@ -311,6 +329,7 @@ export function crearMovimientosApi(client: SupabaseClient): MovimientosApi {
 interface FilaFijo {
   id: string
   nombre: string
+  descripcion: string
   tipo: Fijo['tipo']
   importe: number
   cuenta_id: string
@@ -326,6 +345,7 @@ interface FilaFijo {
 const aFijo = (f: FilaFijo): Fijo => ({
   id: f.id,
   nombre: f.nombre,
+  descripcion: f.descripcion ?? '',
   tipo: f.tipo,
   importe: f.importe,
   cuentaId: f.cuenta_id,
@@ -341,6 +361,7 @@ const aFijo = (f: FilaFijo): Fijo => ({
 function aFilaFijo(f: Partial<NuevoFijo>): Record<string, unknown> {
   const r: Record<string, unknown> = {}
   if (f.nombre !== undefined) r.nombre = f.nombre
+  if (f.descripcion !== undefined) r.descripcion = f.descripcion
   if (f.tipo !== undefined) r.tipo = f.tipo
   if (f.importe !== undefined) r.importe = f.importe
   if (f.cuentaId !== undefined) r.cuenta_id = f.cuentaId
@@ -387,6 +408,22 @@ export function crearFijosApi(client: SupabaseClient): FijosApi {
     },
     async quitarOmision(fijoId, mes) {
       const { error } = await client.from('fijos_omitidos').delete().eq('fijo_id', fijoId).eq('mes', mes)
+      comprobar(error)
+    },
+    async listarFechas() {
+      const { data, error } = await client.from('fijos_fechas').select('fijo_id, mes, fecha')
+      comprobar(error)
+      return (data as { fijo_id: string; mes: string; fecha: string }[]).map(
+        (f): FijoFecha => ({ fijoId: f.fijo_id, mes: f.mes, fecha: f.fecha }),
+      )
+    },
+    async fijarFecha(fijoId, mes, fecha) {
+      const user_id = await idUsuario(client)
+      const { error } = await client.from('fijos_fechas').upsert({ user_id, fijo_id: fijoId, mes, fecha })
+      comprobar(error)
+    },
+    async quitarFecha(fijoId, mes) {
+      const { error } = await client.from('fijos_fechas').delete().eq('fijo_id', fijoId).eq('mes', mes)
       comprobar(error)
     },
   }

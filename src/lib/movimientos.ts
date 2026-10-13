@@ -228,6 +228,6 @@ export function filtrarMovimientos(movs: Movimiento[], f: FiltroMovimientos): Mo
       (!f.categoriaId || m.categoriaId === f.categoriaId) &&
       (!f.tipo || m.tipo === f.tipo) &&
       (!f.fijo || (f.fijo === 'fijo') === (m.fijoId !== null)) &&
-      (!texto || normalizarConcepto(m.nota).includes(texto)),
+      (!texto || normalizarConcepto(`${m.nota} ${m.descripcion}`).includes(texto)),
   )
 }

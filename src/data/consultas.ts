@@ -31,6 +31,7 @@ export const opcPagosFijos = (desde: Mes, hasta: Mes) => ({
 
 export const opcFijos = () => ({ queryKey: ['fijos'] as const, queryFn: () => dataSource.fijos.listar() })
 export const opcOmitidos = () => ({ queryKey: ['omitidos'] as const, queryFn: () => dataSource.fijos.listarOmitidos() })
+export const opcFechasFijos = () => ({ queryKey: ['fechasFijos'] as const, queryFn: () => dataSource.fijos.listarFechas() })
 export const opcPresupuestos = () => ({ queryKey: ['presupuestos'] as const, queryFn: () => dataSource.presupuestos.listar() })
 export const opcAjustes = () => ({ queryKey: ['ajustes'] as const, queryFn: () => dataSource.ajustes.obtener() })
 
@@ -49,12 +50,15 @@ export function useControlMes(mes: Mes): { datos: DatosControl | null; cargando:
   const pagos = useQuery(opcPagosFijos(mes, mes))
   const fijos = useQuery(opcFijos())
   const omitidos = useQuery(opcOmitidos())
+  const fechas = useQuery(opcFechasFijos())
   const presupuestos = useQuery(opcPresupuestos())
   const ajustes = useQuery(opcAjustes())
-  const consultas = [movs, pagos, fijos, omitidos, presupuestos, ajustes]
+  const consultas = [movs, pagos, fijos, omitidos, fechas, presupuestos, ajustes]
 
   const datos = useMemo(() => {
-    if (!movs.data || !pagos.data || !fijos.data || !omitidos.data || !presupuestos.data || !ajustes.data) return null
+    if (!movs.data || !pagos.data || !fijos.data || !omitidos.data || !fechas.data || !presupuestos.data || !ajustes.data) {
+      return null
+    }
     return {
       control: calcularControl({
         mes,
@@ -65,11 +69,12 @@ export function useControlMes(mes: Mes): { datos: DatosControl | null; cargando:
         fijos: fijos.data,
         pagos: pagos.data,
         omitidos: omitidos.data,
+        fechas: fechas.data,
       }),
       presupuestos: presupuestos.data,
       movimientos: movs.data,
     }
-  }, [mes, movs.data, pagos.data, fijos.data, omitidos.data, presupuestos.data, ajustes.data])
+  }, [mes, movs.data, pagos.data, fijos.data, omitidos.data, fechas.data, presupuestos.data, ajustes.data])
 
   return {
     datos,
@@ -81,16 +86,17 @@ export function useControlMes(mes: Mes): { datos: DatosControl | null; cargando:
 /** Igual que `useControlMes`, pero pidiendo los datos frescos: se usa justo después de guardar algo. */
 export async function calcularControlActual(qc: QueryClient, mes: Mes): Promise<DatosControl> {
   const [desde, hasta] = rangoControl(mes)
-  const [movimientos, pagos, fijos, omitidos, presupuestos, ajustes] = await Promise.all([
+  const [movimientos, pagos, fijos, omitidos, fechas, presupuestos, ajustes] = await Promise.all([
     qc.fetchQuery({ ...opcMovimientos(desde, hasta), staleTime: 0 }),
     qc.fetchQuery({ ...opcPagosFijos(mes, mes), staleTime: 0 }),
     qc.fetchQuery(opcFijos()),
     qc.fetchQuery(opcOmitidos()),
+    qc.fetchQuery(opcFechasFijos()),
     qc.fetchQuery(opcPresupuestos()),
     qc.fetchQuery(opcAjustes()),
   ])
   return {
-    control: calcularControl({ mes, hoy: hoyISO(), movimientos, presupuestos, ajustes, fijos, pagos, omitidos }),
+    control: calcularControl({ mes, hoy: hoyISO(), movimientos, presupuestos, ajustes, fijos, pagos, omitidos, fechas }),
     presupuestos,
     movimientos,
   }
@@ -99,6 +105,7 @@ export async function calcularControlActual(qc: QueryClient, mes: Mes): Promise<
 export const useTodosMovimientos = () => useQuery(opcTodosMovimientos())
 export const useFijos = () => useQuery(opcFijos())
 export const useOmitidos = () => useQuery(opcOmitidos())
+export const useFechasFijos = () => useQuery(opcFechasFijos())
 export const usePresupuestos = () => useQuery(opcPresupuestos())
 export const usePagosFijos = (desde: Mes, hasta: Mes) => useQuery(opcPagosFijos(desde, hasta))
 
@@ -107,7 +114,9 @@ export function useAccionesFijos() {
   const qc = useQueryClient()
   return useMemo(() => {
     const refrescar = () =>
-      Promise.all(['fijos', 'omitidos', 'movimientos', 'saldos'].map((k) => qc.invalidateQueries({ queryKey: [k] })))
+      Promise.all(
+        ['fijos', 'omitidos', 'fechasFijos', 'movimientos', 'saldos'].map((k) => qc.invalidateQueries({ queryKey: [k] })),
+      )
     return {
       async crear(f: Parameters<typeof dataSource.fijos.crear>[0]) {
         const r = await dataSource.fijos.crear(f)
@@ -129,6 +138,14 @@ export function useAccionesFijos() {
       },
       async quitarOmision(fijoId: string, mes: Mes) {
         await dataSource.fijos.quitarOmision(fijoId, mes)
+        await refrescar()
+      },
+      async fijarFecha(fijoId: string, mes: Mes, fecha: Fecha) {
+        await dataSource.fijos.fijarFecha(fijoId, mes, fecha)
+        await refrescar()
+      },
+      async quitarFecha(fijoId: string, mes: Mes) {
+        await dataSource.fijos.quitarFecha(fijoId, mes)
         await refrescar()
       },
     }

@@ -3,12 +3,16 @@ import type { Fijo, Movimiento } from '../data/types'
 import {
   costeAnual,
   costeMensual,
+  esPuntual,
+  etiquetaPeriodicidad,
   fijoDesdeMovimiento,
   fijosDelMes,
   movimientoDePago,
   previstoPendiente,
   proximoMesQueToca,
+  proximosCargos,
   resumenFijos,
+  textoDias,
   tocaEnMes,
   validarFijo,
 } from './fijos'
@@ -17,6 +21,7 @@ function fijo(p: Partial<Fijo> = {}): Fijo {
   return {
     id: 'f1',
     nombre: 'Alquiler',
+    descripcion: '',
     tipo: 'gasto',
     importe: 60000,
     cuentaId: 'c1',
@@ -41,6 +46,7 @@ function pago(p: Partial<Movimiento> = {}): Movimiento {
     cuentaDestinoId: null,
     categoriaId: 'casa',
     nota: 'Alquiler',
+    descripcion: '',
     fijoId: 'f1',
     fijoMes: '2026-09-01',
     mesImputado: null,
@@ -195,6 +201,11 @@ describe('movimientoDePago', () => {
     })
   })
 
+  it('copia la descripción del fijo', () => {
+    const m = movimientoDePago(fijo({ descripcion: 'Iberdrola' }), '2026-09-01', { fecha: '2026-09-07', importe: 1, cuentaId: 'c1' })
+    expect(m.descripcion).toBe('Iberdrola')
+  })
+
   it('gasto pagado por adelantado: el fijo_mes es el del pendiente y no se imputa', () => {
     const m = movimientoDePago(fijo(), '2026-10-01', { fecha: '2026-09-30', importe: 60000, cuentaId: 'c1' })
     expect(m.fijoMes).toBe('2026-10-01')
@@ -233,12 +244,13 @@ describe('fijoDesdeMovimiento', () => {
     cuentaDestinoId: null,
     categoriaId: 'suscripciones',
     mesImputado: null,
+    descripcion: ' Cuota con piscina ',
   }
 
   it('mensual, día = día de la fecha, desde el mes de la fecha', () => {
     const r = fijoDesdeMovimiento(base, '  Gimnasio ')!
     expect(r.mes).toBe('2026-09-01')
-    expect(r.fijo).toMatchObject({ nombre: 'Gimnasio', cadaMeses: 1, diaMes: 17, desde: '2026-09-01', activo: true, hasta: null })
+    expect(r.fijo).toMatchObject({ nombre: 'Gimnasio', descripcion: 'Cuota con piscina', cadaMeses: 1, diaMes: 17, desde: '2026-09-01', activo: true, hasta: null })
   })
 
   it('un ingreso imputado a otro mes deja ese mes como pagado', () => {
@@ -269,5 +281,76 @@ describe('validarFijo', () => {
     expect(validarFijo({ ...ok, hasta: '2025-12-01' })).toMatch(/último mes/)
     expect(validarFijo({ ...ok, tipo: 'traspaso', categoriaId: null, cuentaDestinoId: 'c1' })).toMatch(/distintas/)
     expect(validarFijo({ ...ok, tipo: 'traspaso', categoriaId: null, cuentaDestinoId: 'c2' })).toBeNull()
+  })
+})
+
+describe('cargos puntuales ("Una vez")', () => {
+  const itv = fijo({ id: 'itv', nombre: 'ITV', desde: '2026-11-01', hasta: '2026-11-01', diaMes: 8 })
+
+  it('solo tocan en su mes', () => {
+    expect(esPuntual(itv)).toBe(true)
+    expect(tocaEnMes(itv, '2026-11-01')).toBe(true)
+    expect(tocaEnMes(itv, '2026-12-01')).toBe(false)
+    expect(tocaEnMes(itv, '2026-10-01')).toBe(false)
+  })
+
+  it('no suman coste mensual ni anual y se etiquetan como "Una vez"', () => {
+    expect(costeMensual(itv)).toBe(0)
+    expect(costeAnual(itv)).toBe(0)
+    expect(etiquetaPeriodicidad(itv)).toBe('Una vez')
+    expect(etiquetaPeriodicidad(fijo({ cadaMeses: 3 }))).toBe('Trimestral')
+  })
+})
+
+describe('fecha cambiada para un mes', () => {
+  const luz = fijo({ id: 'luz', nombre: 'Luz', diaMes: 5 })
+  const fechas = [{ fijoId: 'luz', mes: '2026-09-01', fecha: '2026-09-08' }]
+
+  it('sustituye al día habitual solo en ese mes', () => {
+    const [sep] = fijosDelMes([luz], '2026-09-01', [], [], '2026-09-06', fechas)
+    expect(sep.fechaEsperada).toBe('2026-09-08')
+    expect(sep.fechaCambiada).toBe(true)
+    expect(sep.estado).toBe('pendiente')
+    const [oct] = fijosDelMes([luz], '2026-10-01', [], [], '2026-09-06', fechas)
+    expect(oct.fechaEsperada).toBe('2026-10-05')
+    expect(oct.fechaCambiada).toBe(false)
+  })
+})
+
+describe('proximosCargos', () => {
+  const alquiler = fijo({ id: 'alq', nombre: 'Alquiler', diaMes: 1 })
+  const luz = fijo({ id: 'luz', nombre: 'Luz', diaMes: 28 })
+  const gym = fijo({ id: 'gym', nombre: 'Gimnasio', diaMes: 20 })
+  const hoy = '2026-09-25'
+  const alquilerSep = pago({ id: 'p-alq', fijoId: 'alq', fijoMes: '2026-09-01' })
+
+  it('incluye los de los próximos 7 días, también del mes siguiente, y los que ya se esperaban', () => {
+    const r = proximosCargos([alquiler, luz, gym], [alquilerSep], [], [], hoy)
+    expect(r.map((c) => [c.fijo.id, c.mes, c.dias])).toEqual([
+      ['gym', '2026-09-01', -5],
+      ['luz', '2026-09-01', 3],
+      ['alq', '2026-10-01', 6],
+    ])
+  })
+
+  it('deja fuera los pagados, los omitidos y los que quedan lejos', () => {
+    const pagado = pago({ fijoId: 'gym', fijoMes: '2026-09-01' })
+    const r = proximosCargos([alquiler, luz, gym], [alquilerSep, pagado], [{ fijoId: 'luz', mes: '2026-09-01' }], [], hoy, 5)
+    expect(r.map((c) => c.fijo.id)).toEqual([])
+  })
+
+  it('usa la fecha cambiada a mano', () => {
+    const r = proximosCargos([luz], [], [], [{ fijoId: 'luz', mes: '2026-09-01', fecha: '2026-09-30' }], hoy, 3)
+    expect(r).toEqual([])
+  })
+
+  it('texto de los días', () => {
+    expect([textoDias(0), textoDias(1), textoDias(4), textoDias(-1), textoDias(-3)]).toEqual([
+      'Hoy',
+      'Mañana',
+      'En 4 días',
+      'Ayer',
+      'Hace 3 días',
+    ])
   })
 })

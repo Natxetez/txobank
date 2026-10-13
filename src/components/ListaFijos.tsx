@@ -1,22 +1,26 @@
 import { useState } from 'react'
 import { mensajeError, useCategorias } from '../data/hooks'
 import { useAccionesFijos } from '../data/consultas'
-import type { Mes } from '../data/types'
+import type { Fijo, Mes } from '../data/types'
 import type { EstadoFijo, FijoDelMes } from '../lib/fijos'
 import { diaDeFecha } from '../lib/meses'
 import { useAviso } from './Avisos'
 import { useHojaMovimiento } from './ContextoMovimiento'
 import { useFmt } from './Discreto'
+import { HojaFechaFijo } from './HojaFechaFijo'
+import { HojaFijo } from './HojaFijo'
 import { HojaPagarFijo } from './HojaPagarFijo'
+import { Icono } from './Icono'
+import type { NombreIcono } from './Icono'
 
-const ICONO: Record<EstadoFijo, { simbolo: string; texto: string }> = {
-  pendiente: { simbolo: '○', texto: 'Pendiente' },
-  esperado: { simbolo: '⚠', texto: 'Se esperaba ya' },
-  pagado: { simbolo: '✓', texto: 'Pagado' },
-  omitido: { simbolo: '⊘', texto: 'Omitido' },
+const ICONO: Record<EstadoFijo, { icono: NombreIcono; texto: string }> = {
+  pendiente: { icono: 'reloj', texto: 'Pendiente' },
+  esperado: { icono: 'alerta', texto: 'Se esperaba ya' },
+  pagado: { icono: 'check', texto: 'Pagado' },
+  omitido: { icono: 'omitido', texto: 'Omitido' },
 }
 
-const BOTON = { gasto: 'Pagado', ingreso: 'Cobrado', traspaso: 'Hecho' } as const
+export const BOTON_PAGAR = { gasto: 'Pagado', ingreso: 'Cobrado', traspaso: 'Hecho' } as const
 const REALIZADO = { gasto: 'Pagado', ingreso: 'Cobrado', traspaso: 'Hecho' } as const
 
 interface Props {
@@ -24,14 +28,24 @@ interface Props {
   mes: Mes
 }
 
-/** Lista de fijos de un mes con su estado y las acciones: marcar como pagado, omitir y volver a incluir. */
+type HojaAbierta =
+  | { tipo: 'pagar'; item: FijoDelMes }
+  | { tipo: 'fecha'; item: FijoDelMes }
+  | { tipo: 'editar'; fijo: Fijo }
+  | { tipo: 'nuevo' }
+  | null
+
+/**
+ * Lista de fijos de un mes con su estado y las acciones: marcar como pagado, cambiar la fecha de ese
+ * mes, omitir y volver a incluir. Tocar un fijo pagado abre su movimiento; uno sin pagar, el fijo.
+ */
 export function ListaFijos({ items, mes }: Props) {
   const fmt = useFmt()
   const aviso = useAviso()
-  const hoja = useHojaMovimiento()
+  const hojaMov = useHojaMovimiento()
   const acciones = useAccionesFijos()
   const categorias = useCategorias().data ?? []
-  const [pagando, setPagando] = useState<FijoDelMes | null>(null)
+  const [hoja, setHoja] = useState<HojaAbierta>(null)
 
   async function cambiarOmision(item: FijoDelMes, omitir: boolean) {
     try {
@@ -47,10 +61,6 @@ export function ListaFijos({ items, mes }: Props) {
     } catch (err) {
       aviso.mostrar(mensajeError(err))
     }
-  }
-
-  if (items.length === 0) {
-    return <p className="vacio">No hay fijos este mes. Puedes crearlos en Ajustes → Fijos.</p>
   }
 
   return (
@@ -73,28 +83,34 @@ export function ListaFijos({ items, mes }: Props) {
               <button
                 type="button"
                 className="fila"
-                disabled={estado !== 'pagado' || !pago}
-                onClick={() => pago && hoja.abrirEditar(pago)}
+                onClick={() => (pago ? hojaMov.abrirEditar(pago) : setHoja({ tipo: 'editar', fijo }))}
               >
                 <span className="estado-fijo" role="img" aria-label={ICONO[estado].texto}>
-                  {ICONO[estado].simbolo}
+                  <Icono nombre={ICONO[estado].icono} />
                 </span>
                 <span className="fila-texto">
                   <span>
                     {cat?.icono ? `${cat.icono} ` : ''}
                     {fijo.nombre}
                   </span>
-                  <span className="secundario pequeno">{detalle}</span>
+                  {fijo.descripcion && <span className="secundario pequeno descripcion">{fijo.descripcion}</span>}
+                  <span className="secundario pequeno">
+                    {detalle}
+                    {item.fechaCambiada && estado !== 'pagado' && <span className="fecha-cambiada"> · fecha cambiada</span>}
+                  </span>
                 </span>
                 {estado !== 'pagado' && <span className="cifra secundario">{fmt(fijo.importe)}</span>}
               </button>
               {(estado === 'pendiente' || estado === 'esperado') && (
                 <div className="acciones-fijo">
-                  <button type="button" className="chip activo" onClick={() => setPagando(item)}>
-                    {BOTON[fijo.tipo]}
+                  <button type="button" className="chip activo" onClick={() => setHoja({ tipo: 'pagar', item })}>
+                    {BOTON_PAGAR[fijo.tipo]}
+                  </button>
+                  <button type="button" className="texto" onClick={() => setHoja({ tipo: 'fecha', item })}>
+                    Cambiar fecha
                   </button>
                   <button type="button" className="texto" onClick={() => void cambiarOmision(item, true)}>
-                    Omitir este mes
+                    Omitir
                   </button>
                 </div>
               )}
@@ -108,8 +124,19 @@ export function ListaFijos({ items, mes }: Props) {
             </li>
           )
         })}
+        <li>
+          <button type="button" className="fila anadir" onClick={() => setHoja({ tipo: 'nuevo' })}>
+            <span className="estado-fijo" aria-hidden="true">
+              <Icono nombre="mas" />
+            </span>
+            {items.length === 0 ? 'No hay fijos este mes. Añade uno' : 'Añadir fijo'}
+          </button>
+        </li>
       </ul>
-      {pagando && <HojaPagarFijo item={pagando} mes={mes} onCerrar={() => setPagando(null)} />}
+      {hoja?.tipo === 'pagar' && <HojaPagarFijo item={hoja.item} mes={mes} onCerrar={() => setHoja(null)} />}
+      {hoja?.tipo === 'fecha' && <HojaFechaFijo item={hoja.item} mes={mes} onCerrar={() => setHoja(null)} />}
+      {hoja?.tipo === 'editar' && <HojaFijo fijo={hoja.fijo} onCerrar={() => setHoja(null)} />}
+      {hoja?.tipo === 'nuevo' && <HojaFijo mesInicial={mes} onCerrar={() => setHoja(null)} />}
     </>
   )
 }

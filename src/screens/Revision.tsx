@@ -1,3 +1,4 @@
+import { Icono } from '../components/Icono'
 import { useEffect, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useFmt } from '../components/Discreto'
@@ -48,7 +49,8 @@ export function Revision() {
   return (
     <section className="pantalla ancho">
       <Link to="/estadisticas" className="volver">
-        ‹ Estadísticas
+        <Icono nombre="izquierda" />
+        Estadísticas
       </Link>
       <h1>Tu resumen de {nombreMes(mes)}</h1>
 
