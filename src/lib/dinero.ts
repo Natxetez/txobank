@@ -6,9 +6,9 @@ const formato = new Intl.NumberFormat('es-ES', {
   useGrouping: 'always',
 })
 
-/** 1250 → "12,50 €" */
+/** 1250 → "12,50 €"; −6000 → "−60,00 €" (con el signo menos tipográfico, como en el resto de la app). */
 export function formatEuros(centimos: number): string {
-  return formato.format(centimos / 100)
+  return formato.format(centimos / 100).replace('-', '−')
 }
 
 /** Texto para rellenar un campo de importe: 1250 → "12,50", 1200 → "12". */

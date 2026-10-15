@@ -14,7 +14,10 @@ import {
   useMovimientos,
   useSaldos,
 } from '../data/hooks'
+import { useGrupos } from '../data/consultas'
 import type { Movimiento, TipoMovimiento } from '../data/types'
+import { etiquetaEntrada, resumenGrupos, separarPorGrupo, textoEntradas } from '../lib/grupos'
+import type { ResumenGrupo } from '../lib/grupos'
 import { finDeMes, formatoDia, mesActual, nombreMes } from '../lib/meses'
 import { agruparPorDia, filtrarMovimientos } from '../lib/movimientos'
 
@@ -59,7 +62,24 @@ export function Movimientos() {
       }),
     [movs.data, texto, cuentaId, categoriaId, tipo, fijo],
   )
-  const grupos = useMemo(() => agruparPorDia(filtrados), [filtrados])
+  // Las entradas de grupos van en su sección y no en la lista diaria (ni en el total de cada día).
+  const gruposQ = useGrupos()
+  const { sueltos, resumen } = useMemo(() => {
+    const todos = gruposQ.data ?? []
+    return {
+      sueltos: separarPorGrupo(filtrados, todos, mes).sueltos,
+      resumen: resumenGrupos(filtrados, todos, mes),
+    }
+  }, [filtrados, gruposQ.data, mes])
+  const grupos = useMemo(() => agruparPorDia(sueltos), [sueltos])
+  const [abiertos, setAbiertos] = useState<Set<string>>(() => new Set())
+  const alternarGrupo = (id: string) =>
+    setAbiertos((prev) => {
+      const nuevo = new Set(prev)
+      if (nuevo.has(id)) nuevo.delete(id)
+      else nuevo.add(id)
+      return nuevo
+    })
   const numFiltros = [cuentaId, categoriaId, tipo, fijo].filter(Boolean).length
   const hayFiltros = numFiltros > 0 || texto.trim() !== ''
   const saldoCuenta = cuentaId ? saldos?.find((s) => s.cuentaId === cuentaId)?.saldo : undefined
@@ -107,6 +127,42 @@ export function Movimientos() {
             {fmt(m.importe)}
           </span>
         </FilaDeslizable>
+      </li>
+    )
+  }
+
+  function entrada(m: Movimiento) {
+    const detalle = [m.descripcion, cuentaPorId.get(m.cuentaId)?.nombre].filter(Boolean).join(' · ')
+    return (
+      <li key={m.id}>
+        <FilaDeslizable onTocar={() => hoja.abrirEditar(m)} onEliminar={() => void eliminar(m)} etiquetaEliminar="Eliminar">
+          <span className="fila-texto">
+            <span>{etiquetaEntrada(m)}</span>
+            {detalle && <span className="secundario pequeno descripcion">{detalle}</span>}
+          </span>
+          <span className="cifra">−{fmt(m.importe)}</span>
+        </FilaDeslizable>
+      </li>
+    )
+  }
+
+  function filaGrupo(r: ResumenGrupo) {
+    const cat = categoriaPorId.get(r.grupo.categoriaId)
+    const abierto = abiertos.has(r.grupo.id)
+    return (
+      <li key={r.grupo.id} className={abierto ? 'grupo-mov abierto' : 'grupo-mov'}>
+        <button className="fila" aria-expanded={abierto} onClick={() => alternarGrupo(r.grupo.id)}>
+          <IconoCategoria color={cat?.color}>{cat?.icono ?? <Icono nombre="etiqueta" />}</IconoCategoria>
+          <span className="fila-texto">
+            <span>{r.grupo.nombre}</span>
+            <span className="secundario pequeno">
+              {[textoEntradas(r.numEntradas), cat?.nombre].filter(Boolean).join(' · ')}
+            </span>
+          </span>
+          <span className="cifra">{fmt(r.total)}</span>
+          <Icono nombre={abierto ? 'arriba' : 'abajo'} className="chevron" />
+        </button>
+        {abierto && <ul className="grupo-entradas">{r.entradas.map(entrada)}</ul>}
       </li>
     )
   }
@@ -166,28 +222,39 @@ export function Movimientos() {
         </p>
       )}
 
-      {movs.isPending ? (
+      {movs.isPending || gruposQ.isPending ? (
         <p className="secundario">Cargando…</p>
       ) : movs.isError ? (
         <p className="error" role="alert">
           {mensajeError(movs.error)}
         </p>
-      ) : grupos.length === 0 ? (
+      ) : grupos.length === 0 && resumen.length === 0 ? (
         <p className="vacio">
           {hayFiltros
             ? 'Ningún movimiento coincide con los filtros.'
             : `Aún no hay movimientos en ${nombreMes(mes)}. Añade el primero con +`}
         </p>
       ) : (
-        grupos.map((g) => (
-          <div key={g.fecha} className="dia">
-            <div className="dia-cab">
-              <h2>{formatoDia(g.fecha)}</h2>
-              {g.gastoNeto !== 0 && <span className="cifra secundario">{fmt(g.gastoNeto)}</span>}
+        <>
+          {resumen.length > 0 && (
+            <div className="dia grupos-mes">
+              <div className="dia-cab">
+                <h2>Grupos</h2>
+                <span className="cifra secundario">{fmt(resumen.reduce((t, r) => t + r.total, 0))}</span>
+              </div>
+              <ul className="lista">{resumen.map(filaGrupo)}</ul>
             </div>
-            <ul className="lista">{g.movimientos.map(fila)}</ul>
-          </div>
-        ))
+          )}
+          {grupos.map((g) => (
+            <div key={g.fecha} className="dia">
+              <div className="dia-cab">
+                <h2>{formatoDia(g.fecha)}</h2>
+                {g.gastoNeto !== 0 && <span className="cifra secundario">{fmt(g.gastoNeto)}</span>}
+              </div>
+              <ul className="lista">{g.movimientos.map(fila)}</ul>
+            </div>
+          ))}
+        </>
       )}
     </section>
   )

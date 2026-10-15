@@ -47,14 +47,14 @@ export function Revision() {
   const siguiente = sumarMeses(mes, 1)
 
   return (
-    <section className="pantalla ancho">
+    <section className="pantalla ancho revision">
       <Link to="/estadisticas" className="volver">
         <Icono nombre="izquierda" />
         Estadísticas
       </Link>
       <h1>Tu resumen de {nombreMes(mes)}</h1>
 
-      <div className="bloque">
+      <div className="bloque tarjeta">
         <h2>Gasto del mes</h2>
         <p className="cifra-grande">{fmt(r.gastoNeto)}</p>
         <p className="secundario">
@@ -69,7 +69,7 @@ export function Revision() {
         )}
       </div>
 
-      <div className="bloque">
+      <div className="bloque tarjeta">
         <h2>Ahorro</h2>
         <p className="cifra-grande">{fmt(r.ahorro)}</p>
         {r.objetivoAhorro > 0 ? (
@@ -139,7 +139,7 @@ export function Revision() {
         )}
       </div>
 
-      <div className="bloque">
+      <div className="bloque tarjeta">
         <h2>Frente a tu media</h2>
         {r.mediaTresMeses === null || r.variacionSobreMedia === null ? (
           <p className="secundario">Aún no hay meses anteriores para comparar.</p>

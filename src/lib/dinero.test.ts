@@ -49,6 +49,7 @@ describe('formatEuros', () => {
     expect(sinEspaciosRaros(formatEuros(1250))).toBe('12,50 €')
     expect(sinEspaciosRaros(formatEuros(123456))).toBe('1.234,56 €')
     expect(sinEspaciosRaros(formatEuros(0))).toBe('0,00 €')
+    expect(sinEspaciosRaros(formatEuros(-6000))).toBe('−60,00 €')
   })
 
   it('agrupa también los miles de 4 cifras', () => {
@@ -56,7 +57,7 @@ describe('formatEuros', () => {
   })
 
   it('formatea negativos', () => {
-    expect(sinEspaciosRaros(formatEuros(-525))).toBe('-5,25 €')
+    expect(sinEspaciosRaros(formatEuros(-525))).toBe('−5,25 €')
   })
 })
 

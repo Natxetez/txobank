@@ -16,7 +16,7 @@ import {
 } from 'recharts'
 import { useFmt } from '../components/Discreto'
 import { useHojaMovimiento } from '../components/ContextoMovimiento'
-import { useControlMes, useTodosMovimientos } from '../data/consultas'
+import { useControlMes, useHistorialSaldos, useOtrosSaldos, useTodosMovimientos } from '../data/consultas'
 import { useAjustes, useCategorias, useCuentas } from '../data/hooks'
 import type { Categoria, Movimiento } from '../data/types'
 import { objetivoAhorro } from '../lib/control'
@@ -121,10 +121,17 @@ export default function Estadisticas() {
   const filasCategorias = useMemo(() => gastoPorCategoria(movs, meses, anteriores), [movs, meses, anteriores])
   const filasIngresos = useMemo(() => ingresosPorCategoria(movs, meses), [movs, meses])
   const mensual = useMemo(() => serieMensual(movs, mesesGrafico), [movs, mesesGrafico])
+  const otrosSaldos = useOtrosSaldos().data
+  const historialSaldos = useHistorialSaldos().data
   const patrimonio = useMemo(
-    () => patrimonioPorMes(cuentas, todos.data ?? [], mesesGrafico, hoy, cuentaId || undefined),
-    [cuentas, todos.data, mesesGrafico, hoy, cuentaId],
+    () =>
+      patrimonioPorMes(cuentas, todos.data ?? [], mesesGrafico, hoy, cuentaId || undefined, {
+        otros: otrosSaldos ?? [],
+        historial: historialSaldos ?? [],
+      }),
+    [cuentas, todos.data, mesesGrafico, hoy, cuentaId, otrosSaldos, historialSaldos],
   )
+  const conOtrosSaldos = patrimonio.some((p) => p.otros !== 0)
 
   const fijosPendientes = control
     ? control.control.fijosMes
@@ -291,6 +298,14 @@ export default function Estadisticas() {
           {calendario.diasSinGasto} días sin gasto variable · racha actual: {racha} {racha === 1 ? 'día' : 'días'}
         </p>
         <div className="calendario" role="grid" aria-label="Gasto variable por día">
+          {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => (
+            <span key={d} className="cal-cabecera" aria-hidden="true">
+              {d}
+            </span>
+          ))}
+          {Array.from({ length: calendario.huecoInicial }, (_, i) => (
+            <span key={`hueco-${i}`} aria-hidden="true" />
+          ))}
           {calendario.dias.map((d) => (
             <button
               key={d.dia}
@@ -355,10 +370,24 @@ export default function Estadisticas() {
               <XAxis dataKey="mes" tickFormatter={abreviaturaMes} tick={EJE} tickLine={false} axisLine={false} />
               <YAxis tick={EJE} tickLine={false} axisLine={false} tickFormatter={eje} width={52} domain={['auto', 'auto']} />
               <Tooltip formatter={tip} labelFormatter={(m) => `Fin de ${etiquetaMes(String(m))}`} contentStyle={{ background: 'var(--superficie)', border: '1px solid var(--borde)', borderRadius: 10 }} />
-              <Area type="monotone" dataKey="saldo" name="Saldo" stroke="var(--principal)" fill="var(--principal)" fillOpacity={0.15} strokeWidth={2} />
+              {conOtrosSaldos ? (
+                <>
+                  <Area type="monotone" dataKey="cuentas" name="Cuentas" stackId="p" stroke="var(--principal)" fill="var(--principal)" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="otros" name="Otros saldos" stackId="p" stroke="var(--acento)" fill="var(--acento)" fillOpacity={0.2} strokeWidth={2} />
+                </>
+              ) : (
+                <Area type="monotone" dataKey="saldo" name="Saldo" stroke="var(--principal)" fill="var(--principal)" fillOpacity={0.15} strokeWidth={2} />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         </div>
+        {conOtrosSaldos && (
+          <p className="leyenda">
+            <span className="l l-cuentas">Cuentas</span>
+            <span className="l l-otros">Otros saldos</span>
+            <span>Hoy: {fmt(patrimonio[patrimonio.length - 1]?.saldo ?? 0)}</span>
+          </p>
+        )}
       </Tarjeta>
 
       <Tarjeta titulo="Ingresos por categoría">

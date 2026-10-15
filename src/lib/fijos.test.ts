@@ -50,6 +50,8 @@ function pago(p: Partial<Movimiento> = {}): Movimiento {
     fijoId: 'f1',
     fijoMes: '2026-09-01',
     mesImputado: null,
+    grupoId: null,
+    hora: null,
     ...p,
   }
 }
@@ -198,6 +200,8 @@ describe('movimientoDePago', () => {
       fijoId: 'f1',
       fijoMes: '2026-09-01',
       mesImputado: null,
+      grupoId: null,
+      hora: null,
     })
   })
 
@@ -244,6 +248,8 @@ describe('fijoDesdeMovimiento', () => {
     cuentaDestinoId: null,
     categoriaId: 'suscripciones',
     mesImputado: null,
+    grupoId: null,
+    hora: null,
     descripcion: ' Cuota con piscina ',
   }
 

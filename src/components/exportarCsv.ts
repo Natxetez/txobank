@@ -1,15 +1,21 @@
 import { conBom, movimientosACsv } from '../lib/csv'
 import { hoyISO } from '../lib/meses'
-import type { Categoria, Cuenta, Fijo, Movimiento } from '../data/types'
+import type { Categoria, Cuenta, Fijo, Grupo, Movimiento } from '../data/types'
 
 /**
  * Entrega el CSV al usuario. En iPhone se comparte con la Web Share API para guardarlo en Archivos;
  * si el navegador no puede compartir archivos, se descarga de la forma normal.
  * Devuelve false si la persona cancela el menú de compartir.
  */
-export async function entregarCsv(movs: Movimiento[], cuentas: Cuenta[], categorias: Categoria[], fijos: Fijo[]): Promise<boolean> {
+export async function entregarCsv(
+  movs: Movimiento[],
+  cuentas: Cuenta[],
+  categorias: Categoria[],
+  fijos: Fijo[],
+  grupos: Grupo[],
+): Promise<boolean> {
   const nombre = `txobank-${hoyISO()}.csv`
-  const contenido = conBom(movimientosACsv(movs, cuentas, categorias, fijos))
+  const contenido = conBom(movimientosACsv(movs, cuentas, categorias, fijos, grupos))
   const archivo = new File([contenido], nombre, { type: 'text/csv;charset=utf-8' })
 
   if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [archivo] })) {

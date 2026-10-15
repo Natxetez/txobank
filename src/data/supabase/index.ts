@@ -8,7 +8,10 @@ import {
   crearCategoriasApi,
   crearCuentasApi,
   crearFijosApi,
+  crearGruposApi,
+  crearMantenimientoApi,
   crearMovimientosApi,
+  crearOtrosSaldosApi,
   crearPresupuestosApi,
   crearSaldosApi,
 } from './datos'
@@ -69,5 +72,8 @@ export function crearSupabaseDataSource(): DataSource {
     fijos: crearFijosApi(client),
     presupuestos: crearPresupuestosApi(client),
     saldos: crearSaldosApi(client),
+    grupos: crearGruposApi(client),
+    otrosSaldos: crearOtrosSaldosApi(client),
+    mantenimiento: crearMantenimientoApi(client),
   }
 }

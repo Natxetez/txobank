@@ -8,11 +8,12 @@ import {
   useCuentas,
   useMovimientos,
 } from '../data/hooks'
-import type { Movimiento, NuevoMovimiento, TipoCategoria, TipoMovimiento } from '../data/types'
+import type { Grupo, Movimiento, NuevoMovimiento, TipoCategoria, TipoMovimiento } from '../data/types'
 import { colorPorPosicion } from '../lib/catalogo'
 import { aTextoEditable, parseImporte } from '../lib/dinero'
 import { fijoDesdeMovimiento } from '../lib/fijos'
-import { hoyISO, mesDeFecha, nombreMes, sumarDias, sumarMeses } from '../lib/meses'
+import { ordenarGrupos, siguienteOrdenGrupo, validarGrupo } from '../lib/grupos'
+import { horaActual, hoyISO, mesDeFecha, nombreMes, sumarDias, sumarMeses } from '../lib/meses'
 import {
   detectarFrecuentes,
   ordenarPorUso,
@@ -22,7 +23,7 @@ import {
   validarMovimiento,
 } from '../lib/movimientos'
 import type { Frecuente } from '../lib/movimientos'
-import { useAccionesFijos } from '../data/consultas'
+import { useAccionesFijos, useAccionesGrupos, useGrupos } from '../data/consultas'
 import { useAviso } from './Avisos'
 import { useFmt } from './Discreto'
 import { Hoja } from './Hoja'
@@ -60,6 +61,8 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
   const cuentas = useCuentas().data ?? []
   const categorias = useCategorias().data ?? []
   const recientes = useMovimientos(sumarDias(hoy, -90), hoy).data ?? []
+  const grupos = useGrupos().data ?? []
+  const accionesGrupos = useAccionesGrupos()
 
   const editando = peticion.tipo === 'editar' ? peticion.movimiento : null
   const base: Plantilla = peticion.tipo === 'editar' ? peticion.movimiento : (peticion.plantilla ?? {})
@@ -97,10 +100,20 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
   const [enviando, setEnviando] = useState(false)
   const [confirmarBorrado, setConfirmarBorrado] = useState(false)
   const [esFijo, setEsFijo] = useState(false)
+  // Grupo de gastos: solo en gastos. La hora se edita en las entradas de grupos.
+  const [grupoId, setGrupoId] = useState<string | null>(
+    base.tipo === undefined || base.tipo === 'gasto' ? (base.grupoId ?? null) : null,
+  )
+  const [hora, setHora] = useState(editando ? (editando.hora ?? '') : horaActual())
+  const [nuevoGrupo, setNuevoGrupo] = useState<{ nombre: string; categoriaId: string | null } | null>(null)
 
   const tipoMov: TipoMovimiento = tipoUi === 'ingreso' && devolucion ? 'devolucion' : tipoUi
   const tipoCat: TipoCategoria = tipoUi === 'ingreso' && !devolucion ? 'ingreso' : 'gasto'
   const esIngresoPuro = tipoMov === 'ingreso'
+  const enGrupo = tipoMov === 'gasto' && grupoId !== null
+  const grupo = enGrupo ? grupos.find((g) => g.id === grupoId) : undefined
+  const catGrupo = grupo ? categorias.find((c) => c.id === grupo.categoriaId) : undefined
+  const gruposVisibles = ordenarGrupos(grupos.filter((g) => !g.archivado || g.id === grupoId))
 
   // Categorías del tipo, sin archivadas (salvo la ya elegida), las más usadas primero.
   const delTipo = categorias.filter((c) => c.tipo === tipoCat)
@@ -111,10 +124,10 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
   )
 
   const frecuentes: Frecuente[] =
-    !editando && !esPlantilla && tipoUi === 'gasto'
+    !editando && !esPlantilla && tipoUi === 'gasto' && !enGrupo
       ? detectarFrecuentes(recientes, hoy).filter((f) => visibles.some((c) => c.id === f.categoriaId))
       : []
-  const sugerencias = enfocado && tipoUi !== 'traspaso' ? sugerirConceptos(nota, recientes, tipoCat) : []
+  const sugerencias = enfocado && tipoUi !== 'traspaso' && !enGrupo ? sugerirConceptos(nota, recientes, tipoCat) : []
 
   const cuentaPropia = cuentas.find((c) => c.id === cuentaId)
   const opcionesCuenta = cuentas.filter((c) => !c.archivada || c.id === cuentaId)
@@ -127,6 +140,51 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
     setDevolucion(false)
     setCategoriaId(null)
     setNueva(null)
+    setNuevoGrupo(null)
+    soltarGrupo()
+  }
+
+  /** Mete el gasto en un grupo: la categoría y el concepto pasan a ser los del grupo. */
+  function seleccionarGrupo(g: Grupo) {
+    setGrupoId(g.id)
+    setCategoriaId(g.categoriaId)
+    setNota(g.nombre)
+    setEsFijo(false)
+    setNueva(null)
+    if (!hora) setHora(horaActual())
+  }
+
+  /** Vuelve a gasto suelto; el concepto del grupo se quita para escribir uno propio. */
+  function soltarGrupo() {
+    const actual = grupos.find((g) => g.id === grupoId)
+    setGrupoId(null)
+    if (actual && nota === actual.nombre) setNota('')
+  }
+
+  function elegirGrupo(g: Grupo) {
+    setNuevoGrupo(null)
+    setError(null)
+    if (grupoId === g.id) soltarGrupo()
+    else seleccionarGrupo(g)
+  }
+
+  async function guardarGrupoNuevo() {
+    if (!nuevoGrupo) return
+    const fallo = validarGrupo(nuevoGrupo, categorias, grupos)
+    if (fallo) return setError(fallo)
+    setError(null)
+    try {
+      const creado = await accionesGrupos.crear({
+        nombre: nuevoGrupo.nombre.trim(),
+        categoriaId: nuevoGrupo.categoriaId!,
+        orden: siguienteOrdenGrupo(grupos),
+        archivado: false,
+      })
+      setNuevoGrupo(null)
+      seleccionarGrupo(creado)
+    } catch (err) {
+      setError(mensajeError(err))
+    }
   }
 
   function alternarDevolucion(valor: boolean) {
@@ -136,6 +194,7 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
   }
 
   function aplicarFrecuente(f: Frecuente) {
+    setGrupoId(null)
     setImporte(aTextoEditable(f.importe))
     setCategoriaId(f.categoriaId)
     setNota(f.nota)
@@ -186,14 +245,19 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
       fecha,
       cuentaId,
       cuentaDestinoId: esTraspaso ? destinoId || null : null,
-      categoriaId: esTraspaso ? null : categoriaId,
-      nota: nota.trim(),
+      // En un grupo, la categoría y el concepto son siempre los del grupo.
+      categoriaId: esTraspaso ? null : (grupo?.categoriaId ?? categoriaId),
+      nota: grupo ? grupo.nombre : nota.trim(),
       descripcion: descripcion.trim(),
       mesImputado,
+      grupoId: enGrupo ? grupoId : null,
+      // Entradas de grupo: la hora elegida. Al editar un suelto se conserva la suya; uno nuevo lleva la actual.
+      hora: enGrupo || editando ? hora || null : horaActual(),
     }
     const fallo = validarMovimiento(datos)
     if (fallo) return setError(fallo)
-    if (esFijo && !editando && tipoMov !== 'devolucion' && !nota.trim()) {
+    const crearFijo = esFijo && !editando && !enGrupo && tipoMov !== 'devolucion'
+    if (crearFijo && !nota.trim()) {
       return setError('Escribe un concepto: será el nombre del fijo.')
     }
 
@@ -202,13 +266,13 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
       if (editando) {
         await acciones.actualizar(editando.id, datos)
         aviso.mostrar('Cambios guardados')
-      } else if (esFijo && tipoMov !== 'devolucion') {
+      } else if (crearFijo) {
         // "Es fijo": se crea el fijo con estos datos y este mes queda como pagado.
         const plan = fijoDesdeMovimiento(datos, nota)!
         const fijo = await accionesFijos.crear(plan.fijo)
         let creado
         try {
-          creado = await acciones.crear({ ...datos, fijoId: fijo.id, fijoMes: plan.mes })
+          creado = await acciones.crear({ ...datos, fijoId: fijo.id, fijoMes: plan.mes, grupoId: null, hora: horaActual() })
         } catch (err) {
           await accionesFijos.borrar(fijo.id).catch(() => undefined)
           throw err
@@ -245,7 +309,8 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
   function duplicar() {
     if (!editando) return
     const { id: _id, ...copia } = editando
-    onDuplicar({ ...copia, fecha: hoy, fijoId: null, fijoMes: null, mesImputado: null })
+    // Conserva el grupo; la copia es de hoy y de ahora.
+    onDuplicar({ ...copia, fecha: hoy, hora: horaActual(), fijoId: null, fijoMes: null, mesImputado: null })
   }
 
   const chipCategoria = (c: { id: string; nombre: string; icono: string | null }) => (
@@ -286,6 +351,82 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
           </label>
         )}
 
+        {tipoUi === 'gasto' && (
+          <div className="frecuentes grupos-chips" aria-label="Grupos de gastos">
+            {gruposVisibles.map((g) => {
+              const cat = categorias.find((c) => c.id === g.categoriaId)
+              const activo = grupoId === g.id
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  className={activo ? 'chip grupo activo' : 'chip grupo'}
+                  aria-pressed={activo}
+                  onClick={() => elegirGrupo(g)}
+                >
+                  {cat?.icono ? `${cat.icono} ` : ''}
+                  {g.nombre}
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              className="chip nueva"
+              aria-expanded={nuevoGrupo !== null}
+              onClick={() =>
+                setNuevoGrupo(
+                  nuevoGrupo
+                    ? null
+                    : { nombre: '', categoriaId: categoriaId ?? visibles.find((c) => !c.archivada)?.id ?? null },
+                )
+              }
+            >
+              + Grupo
+            </button>
+          </div>
+        )}
+
+        {tipoUi === 'gasto' && nuevoGrupo && (
+          <div className="grupo-nuevo">
+            <input
+              autoFocus
+              placeholder="Nombre del grupo (Cafés y pintxos…)"
+              aria-label="Nombre del nuevo grupo"
+              maxLength={60}
+              value={nuevoGrupo.nombre}
+              onChange={(e) => setNuevoGrupo({ ...nuevoGrupo, nombre: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  void guardarGrupoNuevo()
+                }
+              }}
+            />
+            <div className="grupo-nuevo-fila">
+              <select
+                aria-label="Categoría del nuevo grupo"
+                value={nuevoGrupo.categoriaId ?? ''}
+                onChange={(e) => setNuevoGrupo({ ...nuevoGrupo, categoriaId: e.target.value || null })}
+              >
+                <option value="" disabled>
+                  Categoría…
+                </option>
+                {visibles
+                  .filter((c) => !c.archivada)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.icono ? `${c.icono} ` : ''}
+                      {c.nombre}
+                    </option>
+                  ))}
+              </select>
+              <button type="button" className="secundario-btn" onClick={() => void guardarGrupoNuevo()}>
+                Crear
+              </button>
+            </div>
+          </div>
+        )}
+
         {frecuentes.length > 0 && (
           <div className="frecuentes" aria-label="Gastos frecuentes">
             {frecuentes.map((f) => {
@@ -310,7 +451,12 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
           onChange={(e) => setImporte(e.target.value)}
         />
 
-        {tipoUi !== 'traspaso' ? (
+        {enGrupo ? (
+          <p className="grupo-categoria">
+            {catGrupo?.icono ? `${catGrupo.icono} ` : ''}
+            {catGrupo?.nombre ?? 'Sin categoría'} · del grupo
+          </p>
+        ) : tipoUi !== 'traspaso' ? (
           <div className="campo">
             Categoría
             <div className="chips">
@@ -378,7 +524,13 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
             Fecha{fecha === hoy ? ' (hoy)' : ''}
             <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
           </label>
-          {tipoUi !== 'traspaso' && (
+          {enGrupo && (
+            <label className="campo">
+              Hora
+              <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
+            </label>
+          )}
+          {tipoUi !== 'traspaso' && !enGrupo && (
             <label className="campo">
               Cuenta
               <select value={cuentaId} onChange={(e) => setCuentaId(e.target.value)}>
@@ -392,6 +544,19 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
           )}
         </div>
 
+        {enGrupo && (
+          <label className="campo">
+            Cuenta
+            <select value={cuentaId} onChange={(e) => setCuentaId(e.target.value)}>
+              {opcionesCuenta.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         {esIngresoPuro && (
           <label className="campo">
             Cuenta para
@@ -403,28 +568,30 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
           </label>
         )}
 
-        <div className="campo concepto">
-          Concepto (opcional)
-          <input
-            value={nota}
-            placeholder={tipoUi === 'traspaso' ? 'Ahorro del mes' : 'Café, Mercadona…'}
-            autoComplete="off"
-            onChange={(e) => setNota(e.target.value)}
-            onFocus={() => setEnfocado(true)}
-            onBlur={() => setTimeout(() => setEnfocado(false), 150)}
-          />
-          {sugerencias.length > 0 && (
-            <ul className="sugerencias">
-              {sugerencias.map((s) => (
-                <li key={s}>
-                  <button type="button" onClick={() => elegirConcepto(s)}>
-                    {s}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {!enGrupo && (
+          <div className="campo concepto">
+            Concepto (opcional)
+            <input
+              value={nota}
+              placeholder={tipoUi === 'traspaso' ? 'Ahorro del mes' : 'Café, Mercadona…'}
+              autoComplete="off"
+              onChange={(e) => setNota(e.target.value)}
+              onFocus={() => setEnfocado(true)}
+              onBlur={() => setTimeout(() => setEnfocado(false), 150)}
+            />
+            {sugerencias.length > 0 && (
+              <ul className="sugerencias">
+                {sugerencias.map((s) => (
+                  <li key={s}>
+                    <button type="button" onClick={() => elegirConcepto(s)}>
+                      {s}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <label className="campo">
           Descripción (opcional)
@@ -436,7 +603,7 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
           />
         </label>
 
-        {!editando && tipoMov !== 'devolucion' && (
+        {!editando && !enGrupo && tipoMov !== 'devolucion' && (
           <label className="casilla">
             <input type="checkbox" checked={esFijo} onChange={(e) => setEsFijo(e.target.checked)} />
             <span>
@@ -459,7 +626,13 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
         )}
 
         <button type="submit" className="primario" disabled={enviando}>
-          {enviando ? 'Guardando…' : editando ? 'Guardar cambios' : ETIQUETA_GUARDAR[tipoMov]}
+          {enviando
+            ? 'Guardando…'
+            : editando
+              ? 'Guardar cambios'
+              : grupo
+                ? `Guardar en ${grupo.nombre}`
+                : ETIQUETA_GUARDAR[tipoMov]}
         </button>
 
         {editando &&

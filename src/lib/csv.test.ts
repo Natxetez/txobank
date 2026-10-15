@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Categoria, Cuenta, Fijo, Movimiento } from '../data/types'
+import type { Categoria, Cuenta, Fijo, Grupo, Movimiento } from '../data/types'
 import { CABECERA_CSV, campoCsv, conBom, importeCsv, movimientosACsv } from './csv'
 
 const cuentas = [
@@ -11,6 +11,7 @@ const categorias = [
   { id: 'nomina', nombre: 'Nómina' },
 ] as Categoria[]
 const fijos = [{ id: 'f1', nombre: 'Alquiler' }] as Fijo[]
+const grupos = [{ id: 'g1', nombre: 'Cafés y pintxos' }] as Grupo[]
 
 function mov(p: Partial<Movimiento>): Movimiento {
   return {
@@ -26,6 +27,8 @@ function mov(p: Partial<Movimiento>): Movimiento {
     fijoId: null,
     fijoMes: null,
     mesImputado: null,
+    grupoId: null,
+    hora: null,
     ...p,
   }
 }
@@ -61,14 +64,37 @@ describe('movimientosACsv', () => {
       cuentas,
       categorias,
       fijos,
+      grupos,
     )
     const lineas = csv.trimEnd().split('\r\n')
     expect(lineas[0]).toBe(CABECERA_CSV.join(';'))
     expect(lineas.map((l) => l.slice(0, 10)).slice(1)).toEqual(['2026-08-29', '2026-09-01', '2026-09-05', '2026-09-06', '2026-09-12'])
-    expect(lineas[1]).toBe('2026-08-29;ingreso;12,50;Nómina;;Nómina;;;;2026-09')
-    expect(lineas[3]).toBe('2026-09-05;traspaso;12,50;Nómina;Ahorro;;;;;')
-    expect(lineas[4]).toBe('2026-09-06;gasto;12,50;Nómina;;Comida;Alquiler;Transferencia;Alquiler;')
-    expect(lineas[5]).toBe('2026-09-12;gasto;12,50;Nómina;;Comida;"Café; con leche";;;')
+    expect(lineas[1]).toBe('2026-08-29;;ingreso;12,50;Nómina;;Nómina;;;;;2026-09')
+    expect(lineas[3]).toBe('2026-09-05;;traspaso;12,50;Nómina;Ahorro;;;;;;')
+    expect(lineas[4]).toBe('2026-09-06;;gasto;12,50;Nómina;;Comida;Alquiler;Transferencia;;Alquiler;')
+    expect(lineas[5]).toBe('2026-09-12;;gasto;12,50;Nómina;;Comida;"Café; con leche";;;;')
+  })
+
+  it('hora después de la fecha y nombre del grupo después de la descripción', () => {
+    expect(CABECERA_CSV.slice(0, 3)).toEqual(['fecha', 'hora', 'tipo'])
+    expect(CABECERA_CSV[CABECERA_CSV.indexOf('descripcion') + 1]).toBe('grupo')
+    const csv = movimientosACsv(
+      [
+        mov({ fecha: '2026-09-14', hora: '18:10', grupoId: 'g1', nota: 'Cafés y pintxos', importe: 220 }),
+        mov({ fecha: '2026-09-14', hora: '09:35', grupoId: 'g1', nota: 'Cafés y pintxos', descripcion: 'Con Ane', importe: 150 }),
+        mov({ fecha: '2026-09-14', nota: 'Pan' }),
+      ],
+      cuentas,
+      categorias,
+      fijos,
+      grupos,
+    )
+    const lineas = csv.trimEnd().split('\r\n')
+    expect(lineas.slice(1)).toEqual([
+      '2026-09-14;;gasto;12,50;Nómina;;Comida;Pan;;;;',
+      '2026-09-14;09:35;gasto;1,50;Nómina;;Comida;Cafés y pintxos;Con Ane;Cafés y pintxos;;',
+      '2026-09-14;18:10;gasto;2,20;Nómina;;Comida;Cafés y pintxos;;Cafés y pintxos;;',
+    ])
   })
 
   it('con BOM para Excel', () => {
@@ -76,6 +102,6 @@ describe('movimientosACsv', () => {
   })
 
   it('sin movimientos, solo la cabecera', () => {
-    expect(movimientosACsv([], cuentas, categorias, fijos)).toBe(CABECERA_CSV.join(';') + '\r\n')
+    expect(movimientosACsv([], cuentas, categorias, fijos, grupos)).toBe(CABECERA_CSV.join(';') + '\r\n')
   })
 })

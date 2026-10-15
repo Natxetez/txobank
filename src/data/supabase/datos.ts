@@ -8,7 +8,15 @@ import type {
   Cuenta,
   CuentasApi,
   Fijo,
+  ActualizacionSaldo,
   FijoFecha,
+  Grupo,
+  GruposApi,
+  MantenimientoApi,
+  NuevoGrupo,
+  NuevoOtroSaldo,
+  OtroSaldo,
+  OtrosSaldosApi,
   FijoOmitido,
   FijosApi,
   NuevoFijo,
@@ -219,6 +227,8 @@ interface FilaMovimiento {
   fijo_id: string | null
   fijo_mes: string | null
   mes_imputado: string | null
+  grupo_id: string | null
+  hora: string | null
 }
 
 const aMovimiento = (f: FilaMovimiento): Movimiento => ({
@@ -234,6 +244,9 @@ const aMovimiento = (f: FilaMovimiento): Movimiento => ({
   fijoId: f.fijo_id,
   fijoMes: f.fijo_mes,
   mesImputado: f.mes_imputado,
+  grupoId: f.grupo_id ?? null,
+  // Postgres devuelve la hora como "HH:MM:SS".
+  hora: f.hora ? f.hora.slice(0, 5) : null,
 })
 
 function aFilaMovimiento(m: Partial<NuevoMovimiento>): Record<string, unknown> {
@@ -249,6 +262,8 @@ function aFilaMovimiento(m: Partial<NuevoMovimiento>): Record<string, unknown> {
   if (m.fijoId !== undefined) f.fijo_id = m.fijoId
   if (m.fijoMes !== undefined) f.fijo_mes = m.fijoMes
   if (m.mesImputado !== undefined) f.mes_imputado = m.mesImputado
+  if (m.grupoId !== undefined) f.grupo_id = m.grupoId
+  if (m.hora !== undefined) f.hora = m.hora
   return f
 }
 
@@ -305,6 +320,14 @@ export function crearMovimientosApi(client: SupabaseClient): MovimientosApi {
     },
     async borrar(id) {
       const { error } = await client.from('movimientos').delete().eq('id', id)
+      comprobar(error)
+    },
+    async actualizarEntradasGrupo(grupoId, cambios) {
+      const fila: Record<string, unknown> = {}
+      if (cambios.categoriaId !== undefined) fila.categoria_id = cambios.categoriaId
+      if (cambios.nota !== undefined) fila.nota = cambios.nota
+      if (Object.keys(fila).length === 0) return
+      const { error } = await client.from('movimientos').update(fila).eq('grupo_id', grupoId)
       comprobar(error)
     },
     async listarPagosFijos(desde, hasta) {
@@ -465,6 +488,181 @@ export function crearSaldosApi(client: SupabaseClient): SaldosApi {
         cuentaId: f.cuenta_id,
         saldo: Number(f.saldo),
       }))
+    },
+  }
+}
+
+// --- Grupos de gastos ------------------------------------------------------
+
+interface FilaGrupo {
+  id: string
+  nombre: string
+  categoria_id: string
+  orden: number
+  archivado: boolean
+}
+
+const aGrupo = (f: FilaGrupo): Grupo => ({
+  id: f.id,
+  nombre: f.nombre,
+  categoriaId: f.categoria_id,
+  orden: f.orden,
+  archivado: f.archivado,
+})
+
+function aFilaGrupo(g: Partial<NuevoGrupo>): Record<string, unknown> {
+  const r: Record<string, unknown> = {}
+  if (g.nombre !== undefined) r.nombre = g.nombre
+  if (g.categoriaId !== undefined) r.categoria_id = g.categoriaId
+  if (g.orden !== undefined) r.orden = g.orden
+  if (g.archivado !== undefined) r.archivado = g.archivado
+  return r
+}
+
+export function crearGruposApi(client: SupabaseClient): GruposApi {
+  return {
+    async listar() {
+      const { data, error } = await client.from('grupos').select('*').order('orden').order('creado')
+      comprobar(error)
+      return (data as FilaGrupo[]).map(aGrupo)
+    },
+    async crear(grupo) {
+      const { data, error } = await client.from('grupos').insert(aFilaGrupo(grupo)).select().single()
+      comprobar(error)
+      return aGrupo(data as FilaGrupo)
+    },
+    async actualizar(id, cambios) {
+      const { data, error } = await client.from('grupos').update(aFilaGrupo(cambios)).eq('id', id).select().single()
+      comprobar(error)
+      return aGrupo(data as FilaGrupo)
+    },
+    async borrar(id) {
+      const { error } = await client.from('grupos').delete().eq('id', id)
+      comprobar(error)
+    },
+  }
+}
+
+// --- Otros saldos ----------------------------------------------------------
+
+interface FilaOtroSaldo {
+  id: string
+  nombre: string
+  color: string
+  icono: string | null
+  orden: number
+  archivado: boolean
+}
+
+const aOtroSaldo = (f: FilaOtroSaldo): OtroSaldo => ({
+  id: f.id,
+  nombre: f.nombre,
+  color: f.color,
+  icono: f.icono,
+  orden: f.orden,
+  archivado: f.archivado,
+})
+
+function aFilaOtroSaldo(o: Partial<NuevoOtroSaldo>): Record<string, unknown> {
+  const r: Record<string, unknown> = {}
+  if (o.nombre !== undefined) r.nombre = o.nombre
+  if (o.color !== undefined) r.color = o.color
+  if (o.icono !== undefined) r.icono = o.icono
+  if (o.orden !== undefined) r.orden = o.orden
+  if (o.archivado !== undefined) r.archivado = o.archivado
+  return r
+}
+
+interface FilaActualizacion {
+  id: string
+  otro_saldo_id: string
+  saldo: number
+  fecha_hora: string
+}
+
+const aActualizacion = (f: FilaActualizacion): ActualizacionSaldo => ({
+  id: f.id,
+  otroSaldoId: f.otro_saldo_id,
+  saldo: f.saldo,
+  fechaHora: f.fecha_hora,
+})
+
+export function crearOtrosSaldosApi(client: SupabaseClient): OtrosSaldosApi {
+  return {
+    async listar() {
+      const { data, error } = await client.from('otros_saldos').select('*').order('orden').order('creado')
+      comprobar(error)
+      return (data as FilaOtroSaldo[]).map(aOtroSaldo)
+    },
+    async crear(otro) {
+      const { data, error } = await client.from('otros_saldos').insert(aFilaOtroSaldo(otro)).select().single()
+      comprobar(error)
+      return aOtroSaldo(data as FilaOtroSaldo)
+    },
+    async actualizar(id, cambios) {
+      const { data, error } = await client
+        .from('otros_saldos')
+        .update(aFilaOtroSaldo(cambios))
+        .eq('id', id)
+        .select()
+        .single()
+      comprobar(error)
+      return aOtroSaldo(data as FilaOtroSaldo)
+    },
+    async borrar(id) {
+      const { error } = await client.from('otros_saldos').delete().eq('id', id)
+      comprobar(error)
+    },
+    async listarHistorial() {
+      const filas = await paginar<FilaActualizacion>((inicio, fin) =>
+        client
+          .from('otros_saldos_historial')
+          .select('id, otro_saldo_id, saldo, fecha_hora')
+          .order('fecha_hora')
+          .order('id')
+          .range(inicio, fin),
+      )
+      return filas.map(aActualizacion)
+    },
+    async registrarSaldo(otroSaldoId, saldo, fechaHora) {
+      const fila: Record<string, unknown> = { otro_saldo_id: otroSaldoId, saldo }
+      if (fechaHora) fila.fecha_hora = fechaHora
+      const { data, error } = await client.from('otros_saldos_historial').insert(fila).select().single()
+      comprobar(error)
+      return aActualizacion(data as FilaActualizacion)
+    },
+    async borrarActualizacion(id) {
+      const { error } = await client.from('otros_saldos_historial').delete().eq('id', id)
+      comprobar(error)
+    },
+  }
+}
+
+// --- Mantenimiento ---------------------------------------------------------
+
+/** Tablas en un orden que respeta las claves foráneas (primero lo que apunta a otras). */
+const TABLAS_DEL_USUARIO = [
+  'movimientos',
+  'fijos_fechas',
+  'fijos_omitidos',
+  'fijos',
+  'presupuestos',
+  'grupos',
+  'otros_saldos_historial',
+  'otros_saldos',
+  'categorias',
+  'cuentas',
+  'ajustes',
+]
+
+export function crearMantenimientoApi(client: SupabaseClient): MantenimientoApi {
+  return {
+    async borrarTodo() {
+      const userId = await idUsuario(client)
+      for (const tabla of TABLAS_DEL_USUARIO) {
+        const { error } = await client.from(tabla).delete().eq('user_id', userId)
+        comprobar(error)
+      }
     },
   }
 }

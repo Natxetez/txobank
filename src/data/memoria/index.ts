@@ -5,6 +5,7 @@ import { saldoHasta } from '../../lib/estadisticas'
 import { diasDelMes, fechaEnMes, hoyISO, mesActual, sumarMeses } from '../../lib/meses'
 import { ErrorSesion } from '../types'
 import type {
+  ActualizacionSaldo,
   Ajustes,
   Categoria,
   Cuenta,
@@ -12,7 +13,9 @@ import type {
   Fijo,
   FijoFecha,
   FijoOmitido,
+  Grupo,
   Movimiento,
+  OtroSaldo,
   Presupuesto,
   Sesion,
 } from '../types'
@@ -53,6 +56,9 @@ export function crearMemoriaDataSource(): DataSource {
     { id: 'f-itv', nombre: 'ITV', descripcion: 'Estación de Getafe, cita a las 9:30', tipo: 'gasto', importe: 4200, cuentaId: 'c-nomina', cuentaDestinoId: null, categoriaId: cat('Transporte'), diaMes: Math.min(28, Number(hoy.slice(8)) + 4), cadaMeses: 1, desde: mes, hasta: mes, activo: true },
   ]
 
+  // Grupo de gastos de ejemplo: los cafés se apuntan en él.
+  const grupos: Grupo[] = [{ id: 'g-cafes', nombre: 'Cafés y pintxos', categoriaId: cat('Comida'), orden: 0, archivado: false }]
+
   const movimientos: Movimiento[] = []
   const anadir = (m: Partial<Movimiento> & Pick<Movimiento, 'tipo' | 'importe' | 'fecha' | 'cuentaId'>) =>
     movimientos.push({
@@ -64,6 +70,8 @@ export function crearMemoriaDataSource(): DataSource {
       fijoId: null,
       fijoMes: null,
       mesImputado: null,
+      grupoId: null,
+      hora: null,
       ...m,
     })
 
@@ -89,7 +97,7 @@ export function crearMemoriaDataSource(): DataSource {
 
     for (let d = 1; d <= ultimoDia; d++) {
       const r = azar()
-      if (r < 0.55) anadir({ tipo: 'gasto', importe: 150, fecha: f(d), cuentaId: 'c-efectivo', categoriaId: cat('Comida'), nota: 'Café' })
+      if (r < 0.55) anadir({ tipo: 'gasto', importe: 150, fecha: f(d), cuentaId: 'c-efectivo', categoriaId: cat('Comida'), nota: 'Cafés y pintxos', grupoId: 'g-cafes', hora: `0${8 + Math.floor(azar() * 2)}:${String(Math.floor(azar() * 60)).padStart(2, '0')}`, descripcion: r < 0.2 ? 'Con pintxo de tortilla' : '' })
       if (r > 0.35 && r < 0.6) anadir({ tipo: 'gasto', importe: 2500 + Math.round(azar() * 5000), fecha: f(d), cuentaId: 'c-nomina', categoriaId: cat('Comida'), nota: 'Mercadona' })
       if (r > 0.85) anadir({ tipo: 'gasto', importe: 1500 + Math.round(azar() * 3500), fecha: f(d), cuentaId: 'c-nomina', categoriaId: cat('Ocio'), nota: r > 0.93 ? 'Cine' : 'Cena' })
       if (r > 0.9 && r < 0.95) anadir({ tipo: 'gasto', importe: 800 + Math.round(azar() * 900), fecha: f(d), cuentaId: 'c-nomina', categoriaId: cat('Transporte'), nota: 'Gasolina' })
@@ -105,9 +113,22 @@ export function crearMemoriaDataSource(): DataSource {
   ]
   let ajustes: Ajustes = { ahorroTipo: 'importe', ahorroValor: 30000 }
 
+  // Otros saldos de ejemplo, con su historial de actualizaciones.
+  const otrosSaldos: OtroSaldo[] = [
+    { id: 'o-revolut', nombre: 'Revolut', color: '#4C6EF5', icono: '💳', orden: 0, archivado: false },
+    { id: 'o-fondo', nombre: 'Fondo indexado', color: '#7950F2', icono: '📈', orden: 1, archivado: false },
+  ]
+  const historial: ActualizacionSaldo[] = []
+  for (let i = 4; i >= 0; i--) {
+    const dia = fechaEnMes(sumarMeses(mes, -i), 20)
+    if (dia > hoy) continue
+    historial.push({ id: nuevoId('h'), otroSaldoId: 'o-fondo', saldo: 300000 + (4 - i) * 21000, fechaHora: `${dia}T18:30:00.000Z` })
+  }
+  historial.push({ id: nuevoId('h'), otroSaldoId: 'o-revolut', saldo: 10000, fechaHora: `${fechaEnMes(mes, 1)}T10:15:00.000Z` })
+
   // Con ?vacio en la dirección se empieza sin datos, para probar el asistente de primera vez.
   if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('vacio')) {
-    for (const lista of [cuentas, categorias, fijos, movimientos, presupuestos, omitidos, fechas] as unknown[][]) lista.length = 0
+    for (const lista of [cuentas, categorias, fijos, movimientos, presupuestos, omitidos, fechas, grupos, otrosSaldos, historial] as unknown[][]) lista.length = 0
     ajustes = { ahorroTipo: null, ahorroValor: null }
   }
 
@@ -209,6 +230,11 @@ export function crearMemoriaDataSource(): DataSource {
         const i = movimientos.findIndex((m) => m.id === id)
         if (i !== -1) movimientos.splice(i, 1)
       },
+      async actualizarEntradasGrupo(grupoId, cambios) {
+        movimientos.forEach((m, k) => {
+          if (m.grupoId === grupoId) movimientos[k] = { ...m, ...cambios }
+        })
+      },
       async listarPagosFijos(desde, hasta) {
         return movimientos.filter((m) => m.fijoId && m.fijoMes && m.fijoMes >= desde && m.fijoMes <= hasta)
       },
@@ -275,6 +301,65 @@ export function crearMemoriaDataSource(): DataSource {
     saldos: {
       async listar() {
         return cuentas.map((c) => ({ cuentaId: c.id, saldo: saldoHasta(cuentas, movimientos, hoy, c.id) }))
+      },
+    },
+    grupos: {
+      async listar() {
+        return [...grupos].sort((a, b) => a.orden - b.orden)
+      },
+      async crear(g) {
+        if (grupos.some((x) => x.nombre === g.nombre)) throw new Error('Ya existe un elemento con ese nombre.')
+        const nuevo = { ...g, id: nuevoId('g') }
+        grupos.push(nuevo)
+        return nuevo
+      },
+      async actualizar(id, cambios) {
+        return parchear<Grupo>(grupos, id, cambios)
+      },
+      async borrar(id) {
+        const i = grupos.findIndex((g) => g.id === id)
+        if (i !== -1) grupos.splice(i, 1)
+        movimientos.forEach((m, k) => {
+          if (m.grupoId === id) movimientos[k] = { ...m, grupoId: null }
+        })
+      },
+    },
+    otrosSaldos: {
+      async listar() {
+        return [...otrosSaldos].sort((a, b) => a.orden - b.orden)
+      },
+      async crear(o) {
+        const nuevo = { ...o, id: nuevoId('o') }
+        otrosSaldos.push(nuevo)
+        return nuevo
+      },
+      async actualizar(id, cambios) {
+        return parchear<OtroSaldo>(otrosSaldos, id, cambios)
+      },
+      async borrar(id) {
+        const i = otrosSaldos.findIndex((o) => o.id === id)
+        if (i !== -1) otrosSaldos.splice(i, 1)
+        for (let k = historial.length - 1; k >= 0; k--) if (historial[k].otroSaldoId === id) historial.splice(k, 1)
+      },
+      async listarHistorial() {
+        return [...historial].sort((a, b) => (a.fechaHora < b.fechaHora ? -1 : a.fechaHora > b.fechaHora ? 1 : 0))
+      },
+      async registrarSaldo(otroSaldoId, saldo, fechaHora) {
+        const nueva = { id: nuevoId('h'), otroSaldoId, saldo, fechaHora: fechaHora ?? new Date().toISOString() }
+        historial.push(nueva)
+        return nueva
+      },
+      async borrarActualizacion(id) {
+        const i = historial.findIndex((h) => h.id === id)
+        if (i !== -1) historial.splice(i, 1)
+      },
+    },
+    mantenimiento: {
+      async borrarTodo() {
+        for (const lista of [cuentas, categorias, fijos, movimientos, presupuestos, omitidos, fechas, grupos, otrosSaldos, historial] as unknown[][]) {
+          lista.length = 0
+        }
+        ajustes = { ahorroTipo: null, ahorroValor: null }
       },
     },
   }

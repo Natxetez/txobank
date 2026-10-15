@@ -125,6 +125,8 @@ describe('sugerencias desde la media', () => {
     fijoId: null,
     fijoMes: null,
     mesImputado: null,
+    grupoId: null,
+    hora: null,
   })
 
   it('redondea a 10 €', () => {

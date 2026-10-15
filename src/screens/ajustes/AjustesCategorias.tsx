@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Cabecera } from '../../components/Cabecera'
 import { FormCategoria } from '../../components/FormCategoria'
 import { Hoja } from '../../components/Hoja'
+import { Icono, IconoCategoria } from '../../components/Icono'
 import {
   mensajeError,
   useActualizarCategoria,
@@ -37,11 +38,8 @@ export function AjustesCategorias() {
 
   const contenido = (c: Categoria) => (
     <>
-      <span className="punto" style={{ background: c.color }} aria-hidden="true" />
-      <span className="fila-texto">
-        {c.icono ? `${c.icono} ` : ''}
-        {c.nombre}
-      </span>
+      <IconoCategoria color={c.color}>{c.icono || <Icono nombre="etiqueta" />}</IconoCategoria>
+      <span className="fila-texto">{c.nombre}</span>
     </>
   )
 
@@ -78,7 +76,7 @@ export function AjustesCategorias() {
                   disabled={i === 0 || reordenar.isPending}
                   onClick={() => mover(i, -1)}
                 >
-                  ▲
+                  <Icono nombre="arriba" />
                 </button>
                 <button
                   className="mini"
@@ -86,7 +84,7 @@ export function AjustesCategorias() {
                   disabled={i === activas.length - 1 || reordenar.isPending}
                   onClick={() => mover(i, 1)}
                 >
-                  ▼
+                  <Icono nombre="abajo" />
                 </button>
               </li>
             ))}

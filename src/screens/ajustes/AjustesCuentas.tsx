@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Cabecera } from '../../components/Cabecera'
 import { FormCuenta } from '../../components/FormCuenta'
+import { HojaCierreCuenta } from '../../components/HojaCierreCuenta'
 import { Hoja } from '../../components/Hoja'
 import { useActualizarCuenta, useCrearCuenta, useCuentas, useSaldos } from '../../data/hooks'
-import type { Cuenta } from '../../data/types'
+import type { Cuenta, NuevaCuenta } from '../../data/types'
 import { ETIQUETA_TIPO_CUENTA, colorPorPosicion } from '../../lib/catalogo'
 import { useFmt } from '../../components/Discreto'
 
@@ -16,6 +17,8 @@ export function AjustesCuentas() {
   const crear = useCrearCuenta()
   const actualizar = useActualizarCuenta()
   const [edicion, setEdicion] = useState<Edicion>(null)
+  /** Cuenta que se va a archivar con saldo: antes se deja a 0 (HojaCierreCuenta). */
+  const [cierre, setCierre] = useState<{ cuenta: Cuenta; datos: NuevaCuenta; saldo: number } | null>(null)
 
   const lista = cuentas.data ?? []
   const activas = lista.filter((c) => !c.archivada)
@@ -68,12 +71,33 @@ export function AjustesCuentas() {
             orden={siguienteOrden}
             etiquetaGuardar={edicion.modo === 'nueva' ? 'Crear cuenta' : 'Guardar cambios'}
             onGuardar={async (datos) => {
-              if (edicion.modo === 'nueva') await crear.mutateAsync(datos)
-              else await actualizar.mutateAsync({ id: edicion.cuenta.id, cambios: datos })
+              if (edicion.modo === 'nueva') {
+                await crear.mutateAsync(datos)
+              } else {
+                const c = edicion.cuenta
+                // Saldo con el que quedaría, contando un posible cambio del saldo inicial en el formulario.
+                const saldo = (saldoDe(c.id) ?? 0) + datos.saldoInicial - c.saldoInicial
+                if (datos.archivada && !c.archivada && saldo !== 0) {
+                  setCierre({ cuenta: { ...c, saldoInicial: datos.saldoInicial }, datos, saldo })
+                } else {
+                  await actualizar.mutateAsync({ id: c.id, cambios: datos })
+                }
+              }
               setEdicion(null)
             }}
           />
         </Hoja>
+      )}
+
+      {cierre && (
+        <HojaCierreCuenta
+          cuenta={cierre.cuenta}
+          saldo={cierre.saldo}
+          onArchivar={(saldoInicial) =>
+            actualizar.mutateAsync({ id: cierre.cuenta.id, cambios: { ...cierre.datos, saldoInicial } }).then(() => undefined)
+          }
+          onCerrar={() => setCierre(null)}
+        />
       )}
     </section>
   )

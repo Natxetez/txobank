@@ -20,7 +20,8 @@ const enVentana = (m: Movimiento, hoy: Fecha, dias: number) => m.fecha >= sumarD
 export type DatosValidables = Pick<
   Movimiento,
   'tipo' | 'importe' | 'fecha' | 'cuentaId' | 'cuentaDestinoId' | 'categoriaId' | 'mesImputado'
->
+> &
+  Partial<Pick<Movimiento, 'grupoId' | 'hora'>>
 
 /** Devuelve el mensaje de error en español, o null si el movimiento es coherente. */
 export function validarMovimiento(m: DatosValidables): string | null {
@@ -35,6 +36,8 @@ export function validarMovimiento(m: DatosValidables): string | null {
     if (!m.categoriaId) return 'Elige una categoría.'
     if (m.cuentaDestinoId) return 'Solo los traspasos llevan cuenta de destino.'
   }
+  if (m.grupoId && m.tipo !== 'gasto') return 'Solo los gastos pueden ir en un grupo.'
+  if (m.hora && !/^([01]\d|2[0-3]):[0-5]\d$/.test(m.hora)) return 'Elige una hora válida.'
   if (m.mesImputado) {
     if (m.tipo !== 'ingreso') return 'Solo los ingresos pueden contar para otro mes.'
     const propio = mesDeFecha(m.fecha)
@@ -58,7 +61,7 @@ export interface Frecuente {
 
 /**
  * Gastos repetidos: mismo concepto y categoría al menos `minVeces` veces en `dias` días.
- * Los pagos de fijos no cuentan (no son gastos de entrada rápida).
+ * Los pagos de fijos no cuentan (no son gastos de entrada rápida), ni las entradas de grupos (ya tienen su chip).
  */
 export function detectarFrecuentes(
   movs: Movimiento[],
@@ -67,7 +70,7 @@ export function detectarFrecuentes(
 ): Frecuente[] {
   const grupos = new Map<string, Movimiento[]>()
   for (const m of movs) {
-    if (m.tipo !== 'gasto' || m.fijoId || !m.categoriaId || !m.nota.trim() || !enVentana(m, hoy, dias)) continue
+    if (m.tipo !== 'gasto' || m.fijoId || m.grupoId || !m.categoriaId || !m.nota.trim() || !enVentana(m, hoy, dias)) continue
     const clave = `${normalizarConcepto(m.nota)}|${m.categoriaId}`
     grupos.set(clave, [...(grupos.get(clave) ?? []), m])
   }
@@ -147,7 +150,10 @@ export function sugerirCategoria(nota: string, movs: Movimiento[], tipoCategoria
   return mejorId
 }
 
-/** Conceptos anteriores que contienen lo escrito: primero los que empiezan igual, luego los más usados. */
+/**
+ * Conceptos anteriores que contienen lo escrito: primero los que empiezan igual, luego los más usados.
+ * Las entradas de grupos no cuentan: su concepto es el nombre del grupo.
+ */
 export function sugerirConceptos(
   texto: string,
   movs: Movimiento[],
@@ -158,7 +164,7 @@ export function sugerirConceptos(
   if (!q) return []
   const conceptos = new Map<string, { nota: string; n: number; ultima: Fecha }>()
   for (const m of movs) {
-    if (!m.nota.trim() || tipoCategoriaDe(m.tipo) !== tipoCategoria) continue
+    if (!m.nota.trim() || m.grupoId || tipoCategoriaDe(m.tipo) !== tipoCategoria) continue
     const clave = normalizarConcepto(m.nota)
     if (!clave.includes(q) || clave === q) continue
     const e = conceptos.get(clave) ?? { nota: m.nota.trim(), n: 0, ultima: '' }

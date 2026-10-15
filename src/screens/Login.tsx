@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { dataSource } from '../data'
 import { ErrorSesion } from '../data/types'
+import { etiquetaVersion } from '../version'
 
 export function Login() {
   const [email, setEmail] = useState('')
@@ -57,6 +58,7 @@ export function Login() {
           {enviando ? 'Entrando…' : 'Entrar'}
         </button>
       </form>
+      <p className="version-app">{etiquetaVersion()}</p>
     </main>
   )
 }

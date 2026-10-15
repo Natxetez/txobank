@@ -1,3 +1,5 @@
+import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -11,8 +13,24 @@ export default defineConfig(({ mode }) => {
     )
   }
 
+  // Versión que se muestra en el inicio de sesión y en Ajustes → Acerca de.
+  const version = (JSON.parse(readFileSync('package.json', 'utf-8')) as { version: string }).version
+  const commit = (() => {
+    if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7)
+    try {
+      return execSync('git rev-parse --short HEAD').toString().trim()
+    } catch {
+      return 'local'
+    }
+  })()
+
   return {
     base: '/txobank/',
+    define: {
+      __APP_VERSION__: JSON.stringify(version),
+      __APP_COMMIT__: JSON.stringify(commit),
+      __APP_FECHA_BUILD__: JSON.stringify(new Date().toISOString()),
+    },
     build: { chunkSizeWarningLimit: 700 },
     plugins: [
       react(),

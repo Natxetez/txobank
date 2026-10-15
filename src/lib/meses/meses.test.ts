@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
+import { diaSemana,
   diasDelMes,
   etiquetaMes,
   finDeMes,
@@ -11,6 +11,14 @@ import {
   sumarDias,
   sumarMeses,
 } from './index'
+
+describe('diaSemana', () => {
+  it('empieza en lunes', () => {
+    expect(diaSemana('2026-10-12')).toBe(0) // lunes
+    expect(diaSemana('2026-10-01')).toBe(3) // jueves
+    expect(diaSemana('2026-10-18')).toBe(6) // domingo
+  })
+})
 
 describe('meses', () => {
   it('mesDeFecha lleva la fecha al día 1', () => {

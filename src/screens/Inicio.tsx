@@ -7,7 +7,8 @@ import { ListaFijos } from '../components/ListaFijos'
 import { ProximosCargos } from '../components/ProximosCargos'
 import { TarjetaRecomendacion } from '../components/TarjetaRecomendacion'
 import { useControlMes, useTodosMovimientos } from '../data/consultas'
-import { useCategorias, useCuentas, useSaldos } from '../data/hooks'
+import { useCategorias } from '../data/hooks'
+import { BloquePatrimonio } from '../components/BloquePatrimonio'
 import { revisionVista, useRecomendaciones } from '../data/recomendaciones'
 import type { Movimiento } from '../data/types'
 import { progresoPresupuestos } from '../lib/control'
@@ -86,10 +87,7 @@ export function Inicio() {
   const { datos, cargando, error } = useControlMes(mes)
   const todos = useTodosMovimientos()
   const categorias = useCategorias().data ?? []
-  const cuentas = useCuentas().data ?? []
-  const saldos = useSaldos().data ?? []
   const reco = useRecomendaciones()
-  const [verCuentas, setVerCuentas] = useState(false)
 
   const hoy = hoyISO()
   const esMesActual = mes === mesActual()
@@ -98,7 +96,6 @@ export function Inicio() {
   const revisionPendiente =
     esMesActual && !revisionVista(mesAnterior) && (todos.data ?? []).some((m) => mesDeCuenta(m) === mesAnterior)
 
-  const saldoTotal = saldos.reduce((t, s) => t + s.saldo, 0)
   const ultimos: Movimiento[] = useMemo(
     () => (todos.data ?? []).filter((m) => m.fecha <= hoy).slice(0, 5),
     [todos.data, hoy],
@@ -211,29 +208,7 @@ export function Inicio() {
         </div>
       )}
 
-      <div className="bloque">
-        <button className="fila saldo-total" aria-expanded={verCuentas} onClick={() => setVerCuentas(!verCuentas)}>
-          <span>Saldo total</span>
-          <span className="cifra">
-            {fmt(saldoTotal)} <Icono nombre={verCuentas ? 'arriba' : 'abajo'} className="chevron" />
-          </span>
-        </button>
-        {verCuentas && (
-          <ul className="lista">
-            {cuentas
-              .filter((c) => !c.archivada)
-              .map((c) => (
-                <li key={c.id}>
-                  <Link className="fila" to={`/movimientos?cuenta=${c.id}`}>
-                    <span className="punto" style={{ background: c.color }} aria-hidden="true" />
-                    <span className="fila-texto">{c.nombre}</span>
-                    <span className="cifra">{fmt(saldos.find((s) => s.cuentaId === c.id)?.saldo ?? 0)}</span>
-                  </Link>
-                </li>
-              ))}
-          </ul>
-        )}
-      </div>
+      <BloquePatrimonio />
 
       <div className="bloque">
         <div className="bloque-cab">

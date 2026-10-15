@@ -16,6 +16,8 @@
 
 - Inicio de sesión con usuario y contraseña. La conexión a la base de datos queda fija en la configuración de la app.
 - Varias cuentas (corriente, ahorro, efectivo, tarjeta) con saldo inicial y saldo actual.
+- Otros saldos fuera de las cuentas (banco virtual, inversiones…) que solo se actualizan a mano, para ver el patrimonio completo.
+- Grupos de gastos ("Cafés y pintxos") para no llenar la lista de gastos sueltos repetidos.
 - Movimientos: gasto, ingreso, traspaso entre cuentas y devolución (dinero que me devuelven, como un Bizum de amigos o la devolución de una compra).
 - Categorías de gasto e ingreso editables, que también se pueden crear al vuelo mientras apunto un movimiento.
 - Control del mes (sección 6): meses naturales, límite del mes, disponible total y por día, objetivo de ahorro, presupuestos que pueden ser distintos cada mes (total y por categoría), avisos al guardar y revisión mensual. Los ingresos pueden contar para el mes anterior o el siguiente al de su fecha.
@@ -73,9 +75,9 @@ Configuración:
 ### Capa de datos intercambiable
 
 - Las pantallas **nunca** importan `@supabase/supabase-js`. Todo pasa por una interfaz `DataSource` definida en `src/data/types.ts`.
-- Los tipos del dominio (`Cuenta`, `Categoria`, `Presupuesto`, `Movimiento`, `Fijo`, `Ajustes`, `Saldo`) son TypeScript puro, sin depender de Supabase. Cada adaptador traduce entre sus filas y estos tipos.
+- Los tipos del dominio (`Cuenta`, `Categoria`, `Presupuesto`, `Movimiento`, `Fijo`, `Ajustes`, `Saldo`, `Grupo`, `OtroSaldo`, `ActualizacionSaldo`) son TypeScript puro, sin depender de Supabase. Cada adaptador traduce entre sus filas y estos tipos.
 - Implementación inicial en `src/data/supabase/`. El adaptador se elige al compilar con `VITE_DATA_BACKEND`: usar otra base de datos en el futuro = escribir otro adaptador que cumpla la misma interfaz y cambiar la variable.
-- La interfaz cubre: sesión (iniciar y cerrar, sesión actual, cambios de sesión), ajustes, cuentas, categorías, presupuestos, movimientos (listar por rango de fechas con filtros, crear, editar, borrar), fijos (incluidos sus pagos, omisiones y fechas cambiadas para un mes) y saldos.
+- La interfaz cubre: sesión (iniciar y cerrar, sesión actual, cambios de sesión), ajustes, cuentas, categorías, presupuestos, movimientos (listar por rango de fechas con filtros, crear, editar, borrar), fijos (incluidos sus pagos, omisiones y fechas cambiadas para un mes), saldos, grupos de gastos, otros saldos con su historial y, mientras la app está en pruebas, "borrar todo".
 - Control del mes, fijos, estadísticas y recomendaciones se calculan en `src/lib/` como funciones puras sobre los datos, sin depender de la base de datos.
 - Supabase devuelve por defecto como máximo 1000 filas por consulta: el adaptador debe paginar al listar movimientos y pagos de fijos.
 - Además del adaptador de Supabase hay uno en memoria con datos de ejemplo (`VITE_DATA_BACKEND=memoria`, `npm run dev:memoria`; con `?vacio` en la dirección arranca sin datos). Sirve para probar la interfaz sin base de datos; los datos se pierden al recargar.
@@ -150,12 +152,15 @@ Todas las tablas llevan `user_id uuid not null default auth.uid() references aut
 | fijo_id | uuid null | FK fijos (`on delete set null`) si es el pago de un fijo |
 | fijo_mes | date null | mes al que corresponde ese pago del fijo |
 | mes_imputado | date null | solo en ingresos: mes al que cuenta, si no es el de su fecha (sección 6) |
+| grupo_id | uuid null | FK grupos (`on delete set null`); solo en gastos |
+| hora | time null | hora del movimiento; la app la rellena con la hora actual al crearlo |
 | creado | timestamptz | |
 
 Restricciones:
 
 - CHECK de coherencia: un traspaso tiene destino y no tiene categoría; gasto, ingreso y devolución tienen categoría y no tienen destino.
 - CHECK: `mes_imputado` solo en ingresos.
+- CHECK: `grupo_id` solo en gastos. Que la categoría del gasto sea la del grupo se asegura en la app.
 - CHECK: si hay `fijo_id`, hay `fijo_mes`. No se exige la inversa: al borrar un fijo, `on delete set null` deja `fijo_id` a nulo y `fijo_mes` se queda, y un "los dos o ninguno" estricto haría fallar ese borrado.
 - `unique (fijo_id, fijo_mes)`: un fijo se paga como mucho una vez por mes. Los NULL no chocan, así que no afecta a los movimientos normales.
 - Que el tipo de la categoría encaje con el del movimiento se valida en la app.
@@ -197,6 +202,40 @@ PK `(fijo_id, mes)`.
 
 PK `(fijo_id, mes)`.
 
+### grupos
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK |
+| nombre | text | nombre libre ("Cafés y pintxos"); único por usuario |
+| categoria_id | uuid | FK categorias (de gasto, `on delete restrict`): categoría de todas sus entradas |
+| orden | int | |
+| archivado | boolean | default false |
+| creado | timestamptz | |
+
+### otros_saldos
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK |
+| nombre | text | "Revolut", "Fondo indexado"… |
+| color | text | hex de la paleta |
+| icono | text null | un emoji, opcional |
+| orden | int | |
+| archivado | boolean | default false |
+| creado | timestamptz | |
+
+### otros_saldos_historial
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK |
+| otro_saldo_id | uuid | FK otros_saldos (`on delete cascade`) |
+| saldo | bigint | céntimos; puede ser negativo |
+| fecha_hora | timestamptz | cuándo se actualizó; default now() |
+
+El saldo actual de cada uno es el de su actualización más reciente.
+
 ### saldos_cuentas (vista)
 
 Vista con `security_invoker = on` (para que respete RLS) que devuelve `cuenta_id` y `saldo`: saldo inicial + ingresos + devoluciones − gastos − traspasos salientes + traspasos entrantes, contando solo movimientos con `fecha <= current_date`.
@@ -214,7 +253,7 @@ create policy "solo_propietario" on public.cuentas
 grant select, insert, update, delete on public.cuentas to authenticated;
 ```
 
-- Mismo patrón para `ajustes`, `categorias`, `presupuestos`, `movimientos`, `fijos`, `fijos_omitidos` y `fijos_fechas`; en la vista, `grant select ... to authenticated`.
+- Mismo patrón para `ajustes`, `categorias`, `presupuestos`, `movimientos`, `fijos`, `fijos_omitidos`, `fijos_fechas`, `grupos`, `otros_saldos` y `otros_saldos_historial`; en la vista, `grant select ... to authenticated`.
 - **El GRANT explícito es imprescindible**: desde el 30 de mayo de 2026, los proyectos nuevos de Supabase no exponen las tablas de `public` a la API de datos por defecto. Sin GRANT, supabase-js devuelve error de permisos aunque RLS esté bien.
 - Nada para el rol `anon`. Registro de usuarios desactivado; el único usuario se crea a mano.
 
@@ -281,7 +320,7 @@ Es el corazón de la app. Toda la lógica va en `src/lib/` como funciones puras 
 
 Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadísticas**, **Ajustes**.
 
-**Inicio de sesión.** Ver sección 4.
+**Inicio de sesión.** Ver sección 4. Abajo, discreta, la versión de la app ("v1.2.0 (a1b2c3d)").
 
 **Primera vez.** Asistente corto; todos los pasos, salvo el primero, se pueden saltar:
 1. Crear la primera cuenta (nombre, tipo, saldo inicial).
@@ -301,11 +340,12 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 - **Fijos del mes**: resumen ("4 de 7 pagados: 620 € de 740 €") y lista con los pendientes primero; los que ya deberían haberse cobrado, destacados. Cada pendiente tiene sus botones **Pagado**, **Cambiar fecha** y **Omitir**; al final, **Añadir fijo**.
 - Presupuestos del mes por categoría: una barra por categoría. Normal hasta el 80 %, aviso del 80 al 100 %, superado a partir del 100 %. Tocar abre la pantalla de Presupuestos.
 - La recomendación más importante del momento (enlace a todas).
-- Saldo total; al tocarlo se despliegan las cuentas. Tocar una cuenta abre sus movimientos.
+- **Patrimonio** = saldo de las cuentas + otros saldos activos. Al tocarlo se despliegan el subtotal y la lista de cuentas (tocar una abre sus movimientos) y el subtotal y la lista de otros saldos, con cuándo se actualizó cada uno.
 - Últimos 5 movimientos.
 
 **Nuevo movimiento** (hoja que sube desde abajo; es la pantalla más importante de la app):
 1. Tipo: Gasto / Ingreso / Traspaso (control segmentado; Gasto por defecto). En Ingreso, un interruptor **Es una devolución** cambia las categorías por las de gasto y lo guarda como devolución.
+2 bis. **Grupos** (solo en Gasto): fila de chips con los grupos activos y "+ Grupo" para crear uno al vuelo. Al elegir uno, la categoría y el concepto son los del grupo ("🛒 Comida · del grupo"), aparece **Hora** junto a la fecha (por defecto la actual), se mantiene la descripción, se ocultan "Es fijo" y los frecuentes, y el botón dice "Guardar en Cafés y pintxos". Tocar otra vez el chip lo deja como gasto suelto. Al editar se puede cambiar de grupo o sacarlo; Duplicar conserva el grupo.
 2. **Frecuentes**: fila de hasta 6 chips con mis gastos repetidos (mismo concepto y categoría al menos 3 veces en 90 días), con su importe habitual ("☕ Café 1,50 €"). Un toque rellena todo; solo queda guardar.
 3. Importe grande con el teclado numérico abierto nada más entrar; acepta coma y punto.
 4. Categorías como chips con emoji, las más usadas en los últimos 90 días primero. El último chip es **+ Nueva**: abre un mini formulario en la misma hoja (nombre, emoji opcional; el color se asigna solo) y, al guardarla, queda creada y seleccionada sin salir del formulario.
@@ -315,7 +355,7 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 8. Botón **Guardar gasto** / **Guardar ingreso** / **Guardar devolución** / **Guardar traspaso**. Al guardar, la hoja se cierra y aparece el aviso descrito en la sección 6.
 - Editar abre la misma hoja con los datos y los botones **Duplicar** (copia con fecha de hoy) y **Eliminar** (con confirmación).
 
-**Movimientos.** Lista del mes agrupada por día, con total diario. Los pagos de fijos llevan la etiqueta "Fijo". Filtros por cuenta, categoría, tipo y fijo/variable, y búsqueda en conceptos y descripciones. Deslizar a la izquierda para eliminar; tocar para editar.
+**Movimientos.** Lista del mes agrupada por día, con total diario. Los pagos de fijos llevan la etiqueta "Fijo". Arriba, la sección **Grupos**: una fila plegada por grupo con entradas ese mes (nombre, nº de entradas, total) que al tocarla despliega sus entradas ("mar 14 · 09:35", descripción, importe). Las entradas de grupos no salen en la lista diaria ni en su total. Los filtros se aplican también a ellas. Filtros por cuenta, categoría, tipo y fijo/variable, y búsqueda en conceptos y descripciones. Deslizar a la izquierda para eliminar; tocar para editar.
 
 **Presupuestos.** Selector de mes. Presupuesto total y una fila por categoría de gasto. Si el importe viene heredado se indica ("igual que en septiembre"). Al cambiar un importe, se pregunta **Solo este mes** o **Este mes y los siguientes** (sección 6). Botón **Sugerir a partir de mi media**, que propone importes con la media de 3 meses redondeada a 10 €. Se llega desde Inicio y desde Ajustes.
 
@@ -325,15 +365,21 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 - Presupuestos (pantalla anterior).
 - Objetivo de ahorro.
 - Fijos: lista ordenada por coste, con descripción, periodicidad, día del cargo y próximo mes en que tocan; arriba, el total de fijos al mes y al año ("Fijos: 740 € al mes, 8.880 € al año"). Debajo, los cargos puntuales. Crear, editar, pausar y eliminar.
-- Cuentas: crear, editar, archivar, saldo inicial.
+- Cuentas: crear, editar, archivar, saldo inicial. Al archivar una cuenta con saldo, un aviso pide dejarla a 0: con un traspaso a (o desde) otra cuenta, o sin movimiento (ajustando su saldo inicial, por si el dinero se sacó en efectivo o fue a otro sitio; el patrimonio de meses anteriores también se ajusta).
+- **Grupos de gastos**: lista con su categoría y el total y nº de entradas del mes actual. Crear, editar, archivar (deja de salir al apuntar; sus entradas siguen contando) y eliminar (las entradas quedan como gastos sueltos). Cambiar el nombre o la categoría de un grupo actualiza también sus entradas.
+- **Otros saldos**: total arriba y lista con su saldo y la fecha y hora de la última actualización. Crear (con saldo inicial, que queda como primera actualización), editar, archivar (con aviso: su saldo pasa a 0 € y queda apuntado en el historial) y eliminar (borra también su historial). Al tocar uno: actualizar su saldo (con fecha y hora editables, por defecto ahora; admite negativos) y ver el historial con la diferencia frente a la actualización anterior, pudiendo borrar una.
 - Categorías: pestañas Gasto / Ingreso. Crear, renombrar, emoji, color, reordenar y archivar. Una categoría con movimientos no se borra, se archiva.
 - Exportar CSV.
+- Acerca de: versión, commit, fecha de compilación, base de datos en uso y usuario.
 - Cerrar sesión.
+- **Zona de pruebas** (temporal): **Borrar todo**, que borra todos los datos del usuario tras escribir BORRAR y vuelve al asistente de primera vez.
 
 ## 9. Reglas de negocio
 
 - Los traspasos no cuentan como ingreso ni gasto; solo mueven saldo entre cuentas.
 - Las devoluciones suman saldo a su cuenta y restan del gasto de su categoría; no cuentan como ingreso.
+- Los otros saldos no cuentan en el control del mes ni en las estadísticas de gasto; solo en el patrimonio.
+- Los frecuentes y el autocompletado de conceptos ignoran las entradas de grupos.
 - Los ingresos cuentan en el control del mes y en las estadísticas por su `mes_imputado`, si lo tienen; los saldos y la lista de movimientos usan siempre la fecha.
 - **Tarjeta de crédito**: es una cuenta más. Los gastos con tarjeta restan de ella (saldo negativo = deuda) y pagar la tarjeta es un traspaso desde la cuenta corriente.
 - Archivar una cuenta o categoría la oculta de los formularios, pero sus movimientos siguen contando.
@@ -350,9 +396,9 @@ Controles arriba: periodo (**Este mes**, **3 meses**, **Este año**, **12 meses*
 1. **Ritmo del mes**: gasto neto acumulado día a día (los pagos de fijos se ven como escalones) frente a la media de los 3 meses anteriores y frente al límite (línea horizontal), con una proyección punteada hasta fin de mes que suma el ritmo variable y los fijos pendientes. Es el gráfico protagonista.
 2. **Gasto por categoría**: barras horizontales ordenadas de mayor a menor, con importe, % del total y variación frente al periodo anterior. Tocar una categoría abre su detalle.
 3. **Fijo frente a variable**: barras apiladas por mes con la parte fija y la variable del gasto.
-4. **Calendario de gasto**: cuadrícula del mes con cada día coloreado según el gasto variable. Encima, los días sin gasto y la racha actual. Tocar un día muestra sus movimientos.
+4. **Calendario de gasto**: cuadrícula del mes, con semanas de lunes a domingo, con cada día coloreado según el gasto variable. Encima, los días sin gasto y la racha actual. Tocar un día muestra sus movimientos.
 5. **Ingresos y gastos por mes**: barras agrupadas de los meses del periodo, con una línea de ahorro.
-6. **Evolución del patrimonio**: saldo total de todas las cuentas al final de cada mes.
+6. **Evolución del patrimonio**: saldo de las cuentas al final de cada mes más, con todas las cuentas seleccionadas, el de los otros saldos activos (su última actualización hasta ese día), apilados. Con una cuenta concreta, solo esa cuenta.
 7. **Ingresos por categoría**: barras horizontales sencillas.
 
 **Detalle de categoría**: evolución de 12 meses, media mensual, presupuesto de cada mes, número de movimientos, ticket medio y los 5 mayores gastos.
@@ -416,10 +462,12 @@ Funciones puras en `src/lib/` con tests de Vitest:
 - Detección de frecuentes y sugerencia de categoría por concepto.
 - Series de los gráficos, incluido el calendario y las rachas sin gasto.
 - Cada regla de recomendación, con casos que la activan y que no.
+- Grupos: separación de sueltos y agrupados, resumen mensual por grupo y validación.
+- Otros saldos: saldo actual, saldo a una fecha o fin de mes y totales.
 
 ## 14. Exportación CSV
 
-Todos los movimientos, ordenados por fecha. Columnas: fecha, tipo, importe, cuenta, cuenta_destino, categoria, concepto, descripcion, fijo (nombre del fijo, si lo es) y cuenta_para_mes (en ingresos imputados a otro mes). Separador `;` y decimales con coma, para que Excel y Numbers en español lo abran bien. UTF-8 con BOM. En iPhone, compartir con la Web Share API (para guardarlo en Archivos); si no está disponible, descarga normal.
+Todos los movimientos, ordenados por fecha. Columnas: fecha, hora, tipo, importe, cuenta, cuenta_destino, categoria, concepto, descripcion, grupo (nombre del grupo, si lo es), fijo (nombre del fijo, si lo es) y cuenta_para_mes. Ordenados por fecha y hora (en ingresos imputados a otro mes). Separador `;` y decimales con coma, para que Excel y Numbers en español lo abran bien. UTF-8 con BOM. En iPhone, compartir con la Web Share API (para guardarlo en Archivos); si no está disponible, descarga normal.
 
 ## 15. Plan por fases
 
@@ -465,3 +513,8 @@ Nota: el plan gratuito de Supabase pausa los proyectos con poca actividad durant
 - El saldo de las cuentas solo cuenta movimientos hasta hoy.
 - La tarjeta de crédito funciona como cuenta con saldo negativo.
 - Una sola moneda: euro.
+- Los otros saldos no admiten movimientos: solo se actualiza su saldo, y cada actualización queda en el historial con su fecha y hora. Suman al patrimonio, pero no al control del mes.
+- Un grupo de gastos es permanente, con nombre libre y una categoría fija; su total se cuenta por meses, así que cada mes empieza de cero. Sus entradas son gastos normales con fecha, hora y descripción.
+- La versión de la app (`package.json`) se muestra en el inicio de sesión y en Ajustes → Acerca de, con el commit del que se compiló.
+- Archivar una cuenta o un otro saldo lo deja a 0, para que el patrimonio cuadre siempre con el dinero que de verdad se tiene.
+- "Borrar todo" en Ajustes es temporal: se quitará cuando haya una versión validada.

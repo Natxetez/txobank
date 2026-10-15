@@ -1,3 +1,4 @@
+import { Volver } from '../components/Volver'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListaFijos } from '../components/ListaFijos'
@@ -17,6 +18,7 @@ export function FijosMes() {
 
   return (
     <section className="pantalla ancho">
+      <Volver />
       <SelectorMes mes={mes} onCambiar={setMes} titulo={`Fijos de ${etiquetaMes(mes)}`} />
       {cargando && <p className="secundario">Cargando…</p>}
       {error && (

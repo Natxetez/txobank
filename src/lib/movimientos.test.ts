@@ -28,6 +28,8 @@ function mov(parcial: Partial<Movimiento>): Movimiento {
     fijoId: null,
     fijoMes: null,
     mesImputado: null,
+    grupoId: null,
+    hora: null,
     ...parcial,
   }
 }
@@ -43,6 +45,8 @@ describe('validarMovimiento', () => {
     cuentaDestinoId: null,
     categoriaId: 'comida',
     mesImputado: null,
+    grupoId: null,
+    hora: null,
   }
 
   it('acepta un gasto correcto', () => {
@@ -79,6 +83,22 @@ describe('validarMovimiento', () => {
     expect(validarMovimiento({ ...gasto, mesImputado: '2026-10-01' })).toMatch(/ingresos/)
   })
 
+  it('grupo: solo en gastos', () => {
+    expect(validarMovimiento({ ...gasto, grupoId: 'g1' })).toBeNull()
+    expect(validarMovimiento({ ...gasto, tipo: 'devolucion', grupoId: 'g1' })).toMatch(/grupo/)
+    expect(validarMovimiento({ ...gasto, tipo: 'ingreso', categoriaId: 'nomina', grupoId: 'g1' })).toMatch(/grupo/)
+    expect(
+      validarMovimiento({ ...gasto, tipo: 'traspaso', categoriaId: null, cuentaDestinoId: 'c2', grupoId: 'g1' }),
+    ).toMatch(/grupo/)
+  })
+
+  it('hora: HH:MM válida o ninguna', () => {
+    expect(validarMovimiento({ ...gasto, hora: '09:35' })).toBeNull()
+    expect(validarMovimiento({ ...gasto, hora: '23:59' })).toBeNull()
+    expect(validarMovimiento({ ...gasto, hora: '24:00' })).toMatch(/hora/)
+    expect(validarMovimiento({ ...gasto, hora: '9:5' })).toMatch(/hora/)
+  })
+
   it('mes imputado cruzando de año', () => {
     const ingreso = { ...gasto, tipo: 'ingreso' as const, categoriaId: 'nomina', fecha: '2026-12-30' }
     expect(validarMovimiento({ ...ingreso, mesImputado: '2027-01-01' })).toBeNull()
@@ -112,6 +132,14 @@ describe('detectarFrecuentes', () => {
     expect(detectarFrecuentes(fijos, HOY)).toEqual([])
     const ingresos = ['2026-09-01', '2026-09-02', '2026-09-03'].map((f) => mov({ nota: 'Café', fecha: f, tipo: 'ingreso' }))
     expect(detectarFrecuentes(ingresos, HOY)).toEqual([])
+  })
+
+  it('ignora las entradas de grupos', () => {
+    const agrupados = ['2026-09-01', '2026-09-02', '2026-09-03'].map((f) => mov({ nota: 'Café', fecha: f, grupoId: 'g1' }))
+    expect(detectarFrecuentes(agrupados, HOY)).toEqual([])
+    expect(detectarFrecuentes([...agrupados, cafe('2026-09-04'), cafe('2026-09-05')], HOY)).toEqual([])
+    const r = detectarFrecuentes([...agrupados, cafe('2026-09-04'), cafe('2026-09-05'), cafe('2026-09-06')], HOY)
+    expect(r[0].veces).toBe(3)
   })
 
   it('agrupa sin distinguir mayúsculas ni acentos y no mezcla categorías', () => {
@@ -196,6 +224,11 @@ describe('sugerirConceptos', () => {
   it('no repite lo ya escrito por completo ni sugiere con texto vacío', () => {
     expect(sugerirConceptos('café con leche', movs, 'gasto')).toEqual([])
     expect(sugerirConceptos('', movs, 'gasto')).toEqual([])
+  })
+
+  it('no sugiere el concepto de las entradas de grupos', () => {
+    const conGrupo = [...movs, mov({ nota: 'Cafés y pintxos', grupoId: 'g1' })]
+    expect(sugerirConceptos('caf', conGrupo, 'gasto')).toEqual(['Café con leche', 'Descafeinado'])
   })
 
   it('respeta el máximo', () => {

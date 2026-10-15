@@ -9,6 +9,10 @@ export type TipoMovimiento = 'gasto' | 'ingreso' | 'traspaso' | 'devolucion'
 export type Mes = string
 /** Fecha ISO `YYYY-MM-DD`. */
 export type Fecha = string
+/** Hora local `HH:MM`. */
+export type Hora = string
+/** Fecha y hora ISO 8601 con zona (`2026-10-15T09:30:00.000Z`). */
+export type FechaHora = string
 
 export interface Ajustes {
   ahorroTipo: 'importe' | 'porcentaje' | null
@@ -57,6 +61,42 @@ export interface Movimiento {
   fijoId: string | null
   fijoMes: Mes | null
   mesImputado: Mes | null
+  /** Grupo de gastos al que pertenece (solo gastos). */
+  grupoId: string | null
+  /** Hora del movimiento, si se conoce. */
+  hora: Hora | null
+}
+
+/**
+ * Grupo de gastos ("Cafés y pintxos"): reúne gastos repetidos con una categoría fija.
+ * Es permanente; su total se cuenta por meses, así que cada mes empieza de cero.
+ */
+export interface Grupo {
+  id: string
+  nombre: string
+  /** Categoría de gasto de todas sus entradas. */
+  categoriaId: string
+  orden: number
+  archivado: boolean
+}
+
+/** Saldo fuera de las cuentas (banco virtual, inversiones…). No admite movimientos: solo se actualiza su saldo. */
+export interface OtroSaldo {
+  id: string
+  nombre: string
+  color: string
+  icono: string | null
+  orden: number
+  archivado: boolean
+}
+
+/** Una actualización del saldo de un "otro saldo". El saldo actual es el de la más reciente. */
+export interface ActualizacionSaldo {
+  id: string
+  otroSaldoId: string
+  /** Céntimos; puede ser negativo (una deuda). */
+  saldo: number
+  fechaHora: FechaHora
 }
 
 export interface Fijo {
@@ -146,9 +186,13 @@ export interface MovimientosApi {
   borrar(id: string): Promise<void>
   /** Pagos de fijos: movimientos cuyo `fijoMes` está entre los dos meses (ambos incluidos), sea cual sea su fecha. */
   listarPagosFijos(desde: Mes, hasta: Mes): Promise<Movimiento[]>
+  /** Cambia la categoría y/o el concepto de todas las entradas de un grupo (al editar el grupo). */
+  actualizarEntradasGrupo(grupoId: string, cambios: { categoriaId?: string; nota?: string }): Promise<void>
 }
 
 export type NuevoFijo = Omit<Fijo, 'id'>
+export type NuevoGrupo = Omit<Grupo, 'id'>
+export type NuevoOtroSaldo = Omit<OtroSaldo, 'id'>
 
 export interface FijoOmitido {
   fijoId: string
@@ -189,6 +233,35 @@ export interface SaldosApi {
   listar(): Promise<Saldo[]>
 }
 
+export interface GruposApi {
+  /** Todos, también los archivados, por orden. */
+  listar(): Promise<Grupo[]>
+  crear(grupo: NuevoGrupo): Promise<Grupo>
+  actualizar(id: string, cambios: Partial<NuevoGrupo>): Promise<Grupo>
+  /** Sus entradas no se borran: se quedan como gastos sueltos. */
+  borrar(id: string): Promise<void>
+}
+
+export interface OtrosSaldosApi {
+  /** Todos, también los archivados, por orden. */
+  listar(): Promise<OtroSaldo[]>
+  crear(otro: NuevoOtroSaldo): Promise<OtroSaldo>
+  actualizar(id: string, cambios: Partial<NuevoOtroSaldo>): Promise<OtroSaldo>
+  /** Borra también su historial. */
+  borrar(id: string): Promise<void>
+  /** Todas las actualizaciones de todos, de la más antigua a la más reciente. */
+  listarHistorial(): Promise<ActualizacionSaldo[]>
+  /** Registra un saldo nuevo con la fecha y hora indicadas (por defecto, ahora). */
+  registrarSaldo(otroSaldoId: string, saldo: number, fechaHora?: FechaHora): Promise<ActualizacionSaldo>
+  borrarActualizacion(id: string): Promise<void>
+}
+
+/** Operaciones de mantenimiento, temporales mientras la app está en pruebas. */
+export interface MantenimientoApi {
+  /** Borra todos los datos del usuario (no el usuario). Después la app vuelve al asistente de primera vez. */
+  borrarTodo(): Promise<void>
+}
+
 export interface SesionApi {
   iniciar(email: string, password: string): Promise<Sesion>
   cerrar(): Promise<void>
@@ -199,7 +272,7 @@ export interface SesionApi {
 
 /**
  * Único punto de acceso a datos para las pantallas.
- * Cubre sesión, ajustes, cuentas, categorías, movimientos, fijos, presupuestos y saldos.
+ * Cubre sesión, ajustes, cuentas, categorías, movimientos, fijos, presupuestos, saldos, grupos y otros saldos.
  */
 export interface DataSource {
   sesion: SesionApi
@@ -210,4 +283,7 @@ export interface DataSource {
   fijos: FijosApi
   presupuestos: PresupuestosApi
   saldos: SaldosApi
+  grupos: GruposApi
+  otrosSaldos: OtrosSaldosApi
+  mantenimiento: MantenimientoApi
 }

@@ -8,7 +8,7 @@ import { finDeMes, hoyISO, mesActual, sumarMeses } from '../lib/meses'
 import { planCambioPresupuesto } from '../lib/presupuestos'
 import type { Alcance } from '../lib/presupuestos'
 import { dataSource } from './index'
-import type { Fecha, Mes, Movimiento, Presupuesto } from './types'
+import type { FechaHora, Fecha, Mes, Movimiento, NuevoGrupo, NuevoOtroSaldo, Presupuesto } from './types'
 
 export const opcMovimientos = (desde: Fecha, hasta: Fecha) => ({
   queryKey: ['movimientos', desde, hasta] as const,
@@ -32,6 +32,12 @@ export const opcPagosFijos = (desde: Mes, hasta: Mes) => ({
 export const opcFijos = () => ({ queryKey: ['fijos'] as const, queryFn: () => dataSource.fijos.listar() })
 export const opcOmitidos = () => ({ queryKey: ['omitidos'] as const, queryFn: () => dataSource.fijos.listarOmitidos() })
 export const opcFechasFijos = () => ({ queryKey: ['fechasFijos'] as const, queryFn: () => dataSource.fijos.listarFechas() })
+export const opcGrupos = () => ({ queryKey: ['grupos'] as const, queryFn: () => dataSource.grupos.listar() })
+export const opcOtrosSaldos = () => ({ queryKey: ['otrosSaldos'] as const, queryFn: () => dataSource.otrosSaldos.listar() })
+export const opcHistorialSaldos = () => ({
+  queryKey: ['historialSaldos'] as const,
+  queryFn: () => dataSource.otrosSaldos.listarHistorial(),
+})
 export const opcPresupuestos = () => ({ queryKey: ['presupuestos'] as const, queryFn: () => dataSource.presupuestos.listar() })
 export const opcAjustes = () => ({ queryKey: ['ajustes'] as const, queryFn: () => dataSource.ajustes.obtener() })
 
@@ -106,6 +112,72 @@ export const useTodosMovimientos = () => useQuery(opcTodosMovimientos())
 export const useFijos = () => useQuery(opcFijos())
 export const useOmitidos = () => useQuery(opcOmitidos())
 export const useFechasFijos = () => useQuery(opcFechasFijos())
+export const useGrupos = () => useQuery(opcGrupos())
+export const useOtrosSaldos = () => useQuery(opcOtrosSaldos())
+export const useHistorialSaldos = () => useQuery(opcHistorialSaldos())
+
+/** Acciones sobre grupos de gastos: refrescan los grupos y los movimientos. */
+export function useAccionesGrupos() {
+  const qc = useQueryClient()
+  return useMemo(() => {
+    const refrescar = () => Promise.all(['grupos', 'movimientos'].map((k) => qc.invalidateQueries({ queryKey: [k] })))
+    return {
+      async crear(g: NuevoGrupo) {
+        const r = await dataSource.grupos.crear(g)
+        await refrescar()
+        return r
+      },
+      /** Si cambian el nombre o la categoría, las entradas ya apuntadas se actualizan también. */
+      async actualizar(id: string, cambios: Partial<NuevoGrupo>) {
+        const r = await dataSource.grupos.actualizar(id, cambios)
+        if (cambios.nombre !== undefined || cambios.categoriaId !== undefined) {
+          await dataSource.movimientos.actualizarEntradasGrupo(id, { nota: r.nombre, categoriaId: r.categoriaId })
+        }
+        await qc.invalidateQueries({ queryKey: ['saldos'] })
+        await refrescar()
+        return r
+      },
+      async borrar(id: string) {
+        await dataSource.grupos.borrar(id)
+        await refrescar()
+      },
+    }
+  }, [qc])
+}
+
+/** Acciones sobre otros saldos y su historial. */
+export function useAccionesOtrosSaldos() {
+  const qc = useQueryClient()
+  return useMemo(() => {
+    const refrescar = () =>
+      Promise.all(['otrosSaldos', 'historialSaldos'].map((k) => qc.invalidateQueries({ queryKey: [k] })))
+    return {
+      async crear(o: NuevoOtroSaldo) {
+        const r = await dataSource.otrosSaldos.crear(o)
+        await refrescar()
+        return r
+      },
+      async actualizar(id: string, cambios: Partial<NuevoOtroSaldo>) {
+        const r = await dataSource.otrosSaldos.actualizar(id, cambios)
+        await refrescar()
+        return r
+      },
+      async borrar(id: string) {
+        await dataSource.otrosSaldos.borrar(id)
+        await refrescar()
+      },
+      async registrarSaldo(otroSaldoId: string, saldo: number, fechaHora?: FechaHora) {
+        const r = await dataSource.otrosSaldos.registrarSaldo(otroSaldoId, saldo, fechaHora)
+        await refrescar()
+        return r
+      },
+      async borrarActualizacion(id: string) {
+        await dataSource.otrosSaldos.borrarActualizacion(id)
+        await refrescar()
+      },
+    }
+  }, [qc])
+}
 export const usePresupuestos = () => useQuery(opcPresupuestos())
 export const usePagosFijos = (desde: Mes, hasta: Mes) => useQuery(opcPagosFijos(desde, hasta))
 

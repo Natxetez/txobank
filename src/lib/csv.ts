@@ -1,7 +1,20 @@
 // Exportación a CSV (SPEC.md, sección 14): separador ";", decimales con coma, UTF-8 con BOM.
-import type { Categoria, Cuenta, Fijo, Movimiento } from '../data/types'
+import type { Categoria, Cuenta, Fijo, Grupo, Movimiento } from '../data/types'
 
-export const CABECERA_CSV = ['fecha', 'tipo', 'importe', 'cuenta', 'cuenta_destino', 'categoria', 'concepto', 'descripcion', 'fijo', 'cuenta_para_mes']
+export const CABECERA_CSV = [
+  'fecha',
+  'hora',
+  'tipo',
+  'importe',
+  'cuenta',
+  'cuenta_destino',
+  'categoria',
+  'concepto',
+  'descripcion',
+  'grupo',
+  'fijo',
+  'cuenta_para_mes',
+]
 
 /** 1250 → "12,50" (siempre con dos decimales, sin símbolo). */
 export function importeCsv(centimos: number): string {
@@ -20,15 +33,20 @@ export function movimientosACsv(
   cuentas: Cuenta[],
   categorias: Categoria[],
   fijos: Fijo[],
+  grupos: Grupo[],
 ): string {
   const cuenta = (id: string | null) => (id ? (cuentas.find((c) => c.id === id)?.nombre ?? '') : '')
   const categoria = (id: string | null) => (id ? (categorias.find((c) => c.id === id)?.nombre ?? '') : '')
   const fijo = (id: string | null) => (id ? (fijos.find((f) => f.id === id)?.nombre ?? '') : '')
+  const grupo = (id: string | null) => (id ? (grupos.find((g) => g.id === id)?.nombre ?? '') : '')
 
-  const ordenados = [...movs].sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0))
+  // Por fecha y, dentro del día, por hora (sin hora, primero); a igualdad, en el orden recibido.
+  const clave = (m: Movimiento) => `${m.fecha} ${m.hora ?? ''}`
+  const ordenados = [...movs].sort((a, b) => (clave(a) < clave(b) ? -1 : clave(a) > clave(b) ? 1 : 0))
   const filas = ordenados.map((m) =>
     [
       m.fecha,
+      m.hora ?? '',
       m.tipo,
       importeCsv(m.importe),
       cuenta(m.cuentaId),
@@ -36,6 +54,7 @@ export function movimientosACsv(
       categoria(m.categoriaId),
       m.nota,
       m.descripcion,
+      grupo(m.grupoId),
       fijo(m.fijoId),
       m.mesImputado ? m.mesImputado.slice(0, 7) : '',
     ]

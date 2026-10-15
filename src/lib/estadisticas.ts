@@ -1,8 +1,9 @@
 // Estadísticas (SPEC.md, sección 10): periodos, resúmenes, series de los gráficos, calendario y rachas.
-import type { Cuenta, Fecha, Mes, Movimiento, Presupuesto } from '../data/types'
+import type { ActualizacionSaldo, Cuenta, Fecha, Mes, Movimiento, OtroSaldo, Presupuesto } from '../data/types'
 import { resumenMes } from './control'
-import { diasDelMes, diaDeFecha, finDeMes, fechaEnMes, mesDeFecha, mesesEntre, sumarDias, sumarMeses } from './meses'
+import { diaSemana, diasDelMes, diaDeFecha, finDeMes, fechaEnMes, mesDeFecha, mesesEntre, sumarDias, sumarMeses } from './meses'
 import { mediaMensual, presupuestoVigente } from './presupuestos'
+import { totalOtrosSaldosEnFecha } from './patrimonio'
 
 export type Periodo = 'mes' | '3m' | 'ano' | '12m'
 
@@ -172,17 +173,32 @@ export function saldoHasta(cuentas: Cuenta[], movs: Movimiento[], limite: Fecha,
   return total
 }
 
-/** Saldo al final de cada mes (el mes en curso, hasta hoy). */
+export interface PuntoPatrimonio {
+  mes: Mes
+  /** Total: cuentas + otros saldos. */
+  saldo: number
+  cuentas: number
+  otros: number
+}
+
+/**
+ * Patrimonio al final de cada mes (el mes en curso, hasta hoy). Con todas las cuentas suma también los
+ * otros saldos activos (su última actualización hasta ese día); con una cuenta concreta, solo esa cuenta.
+ */
 export function patrimonioPorMes(
   cuentas: Cuenta[],
   movs: Movimiento[],
   meses: Mes[],
   hoy: Fecha,
   cuentaId?: string,
-): { mes: Mes; saldo: number }[] {
+  otrosSaldos?: { otros: OtroSaldo[]; historial: ActualizacionSaldo[] },
+): PuntoPatrimonio[] {
   return meses.map((mes) => {
     const fin = finDeMes(mes)
-    return { mes, saldo: saldoHasta(cuentas, movs, fin < hoy ? fin : hoy, cuentaId) }
+    const limite = fin < hoy ? fin : hoy
+    const enCuentas = saldoHasta(cuentas, movs, limite, cuentaId)
+    const otros = !cuentaId && otrosSaldos ? totalOtrosSaldosEnFecha(otrosSaldos.otros, otrosSaldos.historial, limite) : 0
+    return { mes, saldo: enCuentas + otros, cuentas: enCuentas, otros }
   })
 }
 
@@ -271,7 +287,15 @@ export interface DiaCalendario {
   futuro: boolean
 }
 
-export function calendarioGasto(movs: Movimiento[], mes: Mes, hoy: Fecha): { dias: DiaCalendario[]; diasSinGasto: number } {
+/**
+ * Calendario de gasto variable de un mes. `huecoInicial` es cuántas casillas vacías van antes del
+ * día 1 en una cuadrícula que empieza en lunes.
+ */
+export function calendarioGasto(
+  movs: Movimiento[],
+  mes: Mes,
+  hoy: Fecha,
+): { dias: DiaCalendario[]; diasSinGasto: number; huecoInicial: number } {
   const porFecha = variablePorFecha(movs)
   const n = diasDelMes(mes)
   const gastos = Array.from({ length: n }, (_, i) => Math.max(0, porFecha.get(fechaEnMes(mes, i + 1)) ?? 0))
@@ -284,7 +308,7 @@ export function calendarioGasto(movs: Movimiento[], mes: Mes, hoy: Fecha): { dia
     const nivel = gastoVariable === 0 || max === 0 ? 0 : (Math.min(4, Math.max(1, Math.ceil((4 * gastoVariable) / max))) as 1 | 2 | 3 | 4)
     return { dia: i + 1, fecha, gastoVariable, nivel, futuro }
   })
-  return { dias, diasSinGasto }
+  return { dias, diasSinGasto, huecoInicial: diaSemana(mes) }
 }
 
 /** Días seguidos sin gasto variable hasta hoy, sin contar los anteriores al primer movimiento. */

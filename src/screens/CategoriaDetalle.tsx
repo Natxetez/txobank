@@ -46,7 +46,7 @@ export default function CategoriaDetalle() {
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={detalle.meses} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
               <CartesianGrid stroke="var(--borde)" vertical={false} />
-              <XAxis dataKey="mes" tickFormatter={(m: string) => ABREV[Number(m.slice(5, 7)) - 1]} tick={EJE} tickLine={false} axisLine={false} />
+              <XAxis dataKey="mes" tickFormatter={(m: string) => ABREV[Number(m.slice(5, 7)) - 1]} tick={EJE} tickLine={false} axisLine={false} interval={1} />
               <YAxis tick={EJE} tickLine={false} axisLine={false} tickFormatter={eje} width={44} />
               <Tooltip formatter={(v) => fmt(Number(v))} labelFormatter={(m) => etiquetaMes(String(m))} contentStyle={{ background: 'var(--superficie)', border: '1px solid var(--borde)', borderRadius: 10 }} />
               <Bar dataKey="importe" name="Gasto" fill={categoria?.color ?? 'var(--principal)'} radius={[4, 4, 0, 0]} />
@@ -55,7 +55,9 @@ export default function CategoriaDetalle() {
           </ResponsiveContainer>
         </div>
         <p className="leyenda">
-          <span className="l l-variable">Gasto</span>
+          <span className="l" style={{ color: categoria?.color ?? 'var(--principal)' }}>
+            Gasto
+          </span>
           <span className="l l-limite">Presupuesto de cada mes</span>
         </p>
       </section>

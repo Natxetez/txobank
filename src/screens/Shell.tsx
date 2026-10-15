@@ -9,7 +9,10 @@ import { Ajustes } from './ajustes/Ajustes'
 import { AjustesAhorro } from './ajustes/AjustesAhorro'
 import { AjustesCategorias } from './ajustes/AjustesCategorias'
 import { AjustesCuentas } from './ajustes/AjustesCuentas'
+import { AcercaDe } from './ajustes/AcercaDe'
 import { AjustesFijos } from './ajustes/AjustesFijos'
+import { AjustesGrupos } from './ajustes/AjustesGrupos'
+import { AjustesOtrosSaldos } from './ajustes/AjustesOtrosSaldos'
 import { FijosMes } from './FijosMes'
 import { Inicio } from './Inicio'
 import { Movimientos } from './Movimientos'
@@ -59,6 +62,9 @@ function Estructura() {
             <Route path="/ajustes/categorias" element={<AjustesCategorias />} />
             <Route path="/ajustes/fijos" element={<AjustesFijos />} />
             <Route path="/ajustes/ahorro" element={<AjustesAhorro />} />
+            <Route path="/ajustes/grupos" element={<AjustesGrupos />} />
+            <Route path="/ajustes/otros-saldos" element={<AjustesOtrosSaldos />} />
+            <Route path="/ajustes/acerca-de" element={<AcercaDe />} />
             <Route path="*" element={<NoEncontrado />} />
           </Routes>
         </Suspense>

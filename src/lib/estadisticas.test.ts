@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Cuenta, Movimiento } from '../data/types'
+import type { ActualizacionSaldo, Cuenta, Movimiento, OtroSaldo } from '../data/types'
 import {
   calendarioGasto,
   deCuenta,
@@ -34,6 +34,8 @@ function mov(p: Partial<Movimiento>): Movimiento {
     fijoId: null,
     fijoMes: null,
     mesImputado: null,
+    grupoId: null,
+    hora: null,
     ...p,
   }
 }
@@ -174,6 +176,33 @@ describe('patrimonio', () => {
     expect(conOctubre[0].saldo).toBe(164000 - 9999)
     const hoyPrevio = patrimonioPorMes(cuentas, movs, ['2026-09-01'], '2026-09-10')
     expect(hoyPrevio[0].saldo).toBe(165000)
+  })
+
+  it('con todas las cuentas suma los otros saldos activos a fin de cada mes', () => {
+    const local = (a: number, m: number, d: number) => new Date(a, m - 1, d, 12).toISOString()
+    const otros: OtroSaldo[] = [
+      { id: 'o1', nombre: 'Fondo', color: '#7950F2', icono: null, orden: 0, archivado: false },
+      { id: 'o2', nombre: 'Viejo', color: '#868E96', icono: null, orden: 1, archivado: true },
+    ]
+    const historial: ActualizacionSaldo[] = [
+      { id: 'h1', otroSaldoId: 'o1', saldo: 50000, fechaHora: local(2026, 9, 5) },
+      { id: 'h2', otroSaldoId: 'o1', saldo: 60000, fechaHora: local(2026, 10, 3) },
+      { id: 'h3', otroSaldoId: 'o2', saldo: 99900, fechaHora: local(2026, 8, 1) },
+    ]
+    const meses = ['2026-08-01', '2026-09-01', '2026-10-01']
+    const p = patrimonioPorMes(cuentas, movs, meses, '2026-10-20', undefined, { otros, historial })
+    expect(p.map((x) => x.otros)).toEqual([0, 50000, 60000])
+    expect(p.map((x) => x.cuentas)).toEqual([165000, 164000, 164000 - 9999])
+    expect(p.map((x) => x.saldo)).toEqual([165000, 214000, 164000 - 9999 + 60000])
+    // El mes en curso, hasta hoy: la actualización del día 3 aún no ha llegado el día 2.
+    expect(patrimonioPorMes(cuentas, movs, ['2026-10-01'], '2026-10-02', undefined, { otros, historial })[0].otros).toBe(50000)
+  })
+
+  it('con una cuenta concreta no cuenta los otros saldos', () => {
+    const otros: OtroSaldo[] = [{ id: 'o1', nombre: 'Fondo', color: '#7950F2', icono: null, orden: 0, archivado: false }]
+    const historial: ActualizacionSaldo[] = [{ id: 'h1', otroSaldoId: 'o1', saldo: 50000, fechaHora: new Date(2026, 8, 5, 12).toISOString() }]
+    const p = patrimonioPorMes(cuentas, movs, ['2026-09-01'], '2026-10-20', 'c2', { otros, historial })
+    expect(p[0]).toEqual({ mes: '2026-09-01', saldo: 80000, cuentas: 80000, otros: 0 })
   })
 
   it('deCuenta filtra por cuenta de origen', () => {

@@ -16,14 +16,18 @@ interface Props {
 export function SelectorMes({ mes, onCambiar, titulo, children }: Props) {
   return (
     <div className="selector-mes">
-      <button type="button" aria-label="Mes anterior" onClick={() => onCambiar(sumarMeses(mes, -1))}>
-        <Icono nombre="izquierda" />
-      </button>
+      <div className="selector-lado">
+        <button type="button" aria-label="Mes anterior" onClick={() => onCambiar(sumarMeses(mes, -1))}>
+          <Icono nombre="izquierda" />
+        </button>
+      </div>
       <h1>{titulo ?? etiquetaMes(mes)}</h1>
-      <button type="button" aria-label="Mes siguiente" onClick={() => onCambiar(sumarMeses(mes, 1))}>
-        <Icono nombre="derecha" />
-      </button>
-      {children}
+      <div className="selector-lado derecha">
+        <button type="button" aria-label="Mes siguiente" onClick={() => onCambiar(sumarMeses(mes, 1))}>
+          <Icono nombre="derecha" />
+        </button>
+        {children}
+      </div>
     </div>
   )
 }

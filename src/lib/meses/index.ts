@@ -28,6 +28,11 @@ export function hoyISO(ahora: Date = new Date()): Fecha {
   return `${ahora.getFullYear()}-${dos(ahora.getMonth() + 1)}-${dos(ahora.getDate())}`
 }
 
+/** Hora local de ahora como `HH:MM`. */
+export function horaActual(ahora: Date = new Date()): string {
+  return `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`
+}
+
 /** `2026-09-29` → `2026-09-01` */
 export function mesDeFecha(fecha: Fecha): Mes {
   return `${fecha.slice(0, 7)}-01`
@@ -92,6 +97,12 @@ export function diferenciaMeses(a: Mes, b: Mes): number {
   const [ya, ma] = partes(a)
   const [yb, mb] = partes(b)
   return (yb - ya) * 12 + (mb - ma)
+}
+
+/** Día de la semana de una fecha, empezando en lunes: 0 = lunes … 6 = domingo. */
+export function diaSemana(fecha: Fecha): number {
+  const [a, m, d] = partes(fecha)
+  return (new Date(a, m - 1, d).getDay() + 6) % 7
 }
 
 /** Día del mes de una fecha. */

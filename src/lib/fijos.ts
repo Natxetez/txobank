@@ -192,6 +192,8 @@ export function movimientoDePago(
     fijoId: fijo.id,
     fijoMes: mes,
     mesImputado: imputable ? mes : null,
+    grupoId: null,
+    hora: null,
   }
 }
 

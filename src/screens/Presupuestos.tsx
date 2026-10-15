@@ -1,3 +1,4 @@
+import { Volver } from '../components/Volver'
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -208,6 +209,7 @@ export function Presupuestos() {
 
   return (
     <section className="pantalla ancho">
+      <Volver />
       <SelectorMes mes={mes} onCambiar={setMes} />
       <p className="secundario pequeno">
         El presupuesto total incluye los gastos fijos. Cada mes hereda el del anterior si no lo cambias.
