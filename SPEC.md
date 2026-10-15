@@ -70,6 +70,7 @@ Configuración:
 
 - Es lo único que se ve antes de entrar: usuario y contraseña. Supabase identifica a los usuarios por email, así que el usuario es mi email.
 - La sesión se mantiene abierta; se cierra desde Ajustes.
+- **Verificación en dos pasos** (opcional, desde Ajustes → Seguridad): además de la contraseña, un código de 6 dígitos de una app autenticadora (TOTP de Supabase Auth). Al activarla se puede añadir directamente a la app Contraseñas del iPhone (enlace `otpauth://`), escanear un QR o copiar la clave. Con ella activada, el inicio de sesión pide el código en un segundo paso, y el servidor lo exige: una política RLS restrictiva en todas las tablas solo deja acceder a sesiones de nivel `aal2` a quien tiene un factor verificado (migración 004).
 - Errores claros en español (usuario o contraseña incorrectos, sin conexión, demasiados intentos).
 
 ### Capa de datos intercambiable
@@ -370,6 +371,7 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 - **Otros saldos**: total arriba y lista con su saldo y la fecha y hora de la última actualización. Crear (con saldo inicial, que queda como primera actualización), editar, archivar (con aviso: su saldo pasa a 0 € y queda apuntado en el historial) y eliminar (borra también su historial). Al tocar uno: actualizar su saldo (con fecha y hora editables, por defecto ahora; admite negativos) y ver el historial con la diferencia frente a la actualización anterior, pudiendo borrar una.
 - Categorías: pestañas Gasto / Ingreso. Crear, renombrar, emoji, color, reordenar y archivar. Una categoría con movimientos no se borra, se archiva.
 - Exportar CSV.
+- Seguridad: activar o desactivar la verificación en dos pasos (sección 4).
 - Acerca de: versión, commit, fecha de compilación, base de datos en uso y usuario.
 - Cerrar sesión.
 - **Zona de pruebas** (temporal): **Borrar todo**, que borra todos los datos del usuario tras escribir BORRAR y vuelve al asistente de primera vez.
@@ -517,4 +519,5 @@ Nota: el plan gratuito de Supabase pausa los proyectos con poca actividad durant
 - Un grupo de gastos es permanente, con nombre libre y una categoría fija; su total se cuenta por meses, así que cada mes empieza de cero. Sus entradas son gastos normales con fecha, hora y descripción.
 - La versión de la app (`package.json`) se muestra en el inicio de sesión y en Ajustes → Acerca de, con el commit del que se compiló.
 - Archivar una cuenta o un otro saldo lo deja a 0, para que el patrimonio cuadre siempre con el dinero que de verdad se tiene.
+- La verificación en dos pasos es opcional; si está activada, la exige el servidor, no solo la app. Si se pierde la app autenticadora, el factor se borra desde el panel de Supabase.
 - "Borrar todo" en Ajustes es temporal: se quitará cuando haya una versión validada.

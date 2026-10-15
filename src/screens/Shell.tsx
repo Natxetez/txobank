@@ -13,6 +13,7 @@ import { AcercaDe } from './ajustes/AcercaDe'
 import { AjustesFijos } from './ajustes/AjustesFijos'
 import { AjustesGrupos } from './ajustes/AjustesGrupos'
 import { AjustesOtrosSaldos } from './ajustes/AjustesOtrosSaldos'
+import { AjustesSeguridad } from './ajustes/AjustesSeguridad'
 import { FijosMes } from './FijosMes'
 import { Inicio } from './Inicio'
 import { Movimientos } from './Movimientos'
@@ -65,6 +66,7 @@ function Estructura() {
             <Route path="/ajustes/grupos" element={<AjustesGrupos />} />
             <Route path="/ajustes/otros-saldos" element={<AjustesOtrosSaldos />} />
             <Route path="/ajustes/acerca-de" element={<AcercaDe />} />
+            <Route path="/ajustes/seguridad" element={<AjustesSeguridad />} />
             <Route path="*" element={<NoEncontrado />} />
           </Routes>
         </Suspense>

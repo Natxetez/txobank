@@ -124,9 +124,22 @@ export interface Saldo {
 export interface Sesion {
   userId: string
   email: string
+  /** Tiene activada la verificación en dos pasos y esta sesión aún no ha introducido el código. */
+  faltaCodigo: boolean
 }
 
-export type CodigoErrorSesion = 'credenciales' | 'red' | 'demasiados-intentos' | 'desconocido'
+/** Datos para añadir TxoBank a una app autenticadora al activar la verificación en dos pasos. */
+export interface InscripcionMfa {
+  factorId: string
+  /** Imagen del código QR, lista para usar como `src`. */
+  qr: string
+  /** Clave para introducirla a mano en la app autenticadora. */
+  secreto: string
+  /** Enlace `otpauth://` que abre directamente la app Contraseñas del iPhone. */
+  uri: string
+}
+
+export type CodigoErrorSesion = 'credenciales' | 'codigo' | 'red' | 'demasiados-intentos' | 'desconocido'
 
 export class ErrorSesion extends Error {
   readonly codigo: CodigoErrorSesion
@@ -268,6 +281,15 @@ export interface SesionApi {
   actual(): Promise<Sesion | null>
   /** Avisa de cada cambio de sesión. Devuelve la función para dejar de escuchar. */
   alCambiar(cb: (sesion: Sesion | null) => void): () => void
+  /** ¿Tiene activada la verificación en dos pasos? */
+  mfaActiva(): Promise<boolean>
+  /** Empieza a activar la verificación en dos pasos (descarta intentos anteriores sin terminar). */
+  inscribirMfa(): Promise<InscripcionMfa>
+  /** Termina de activarla con el primer código de la app autenticadora. */
+  confirmarMfa(factorId: string, codigo: string): Promise<void>
+  /** Introduce el código al iniciar sesión (cuando `faltaCodigo`). */
+  verificarCodigo(codigo: string): Promise<void>
+  desactivarMfa(): Promise<void>
 }
 
 /**

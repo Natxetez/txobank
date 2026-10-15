@@ -133,6 +133,12 @@ export function crearMemoriaDataSource(): DataSource {
   }
 
   let sesion: Sesion | null = null
+  // Verificación en dos pasos simulada: el código válido es siempre 123456.
+  const CODIGO_DEMO = '123456'
+  let mfa: 'no' | 'pendiente' | 'activa' = 'no'
+  const comprobarCodigo = (codigo: string) => {
+    if (codigo !== CODIGO_DEMO) throw new ErrorSesion('codigo', 'Código incorrecto. En el modo de ejemplo es 123456.')
+  }
   const oyentes = new Set<(s: Sesion | null) => void>()
   const emitir = () => oyentes.forEach((cb) => cb(sesion))
 
@@ -148,7 +154,7 @@ export function crearMemoriaDataSource(): DataSource {
     sesion: {
       async iniciar(email, password) {
         if (!email || !password) throw new ErrorSesion('credenciales', 'Usuario o contraseña incorrectos.')
-        sesion = { userId: 'demo', email }
+        sesion = { userId: 'demo', email, faltaCodigo: mfa === 'activa' }
         emitir()
         return sesion
       },
@@ -162,6 +168,32 @@ export function crearMemoriaDataSource(): DataSource {
       alCambiar(cb) {
         oyentes.add(cb)
         return () => oyentes.delete(cb)
+      },
+      async mfaActiva() {
+        return mfa === 'activa'
+      },
+      async inscribirMfa() {
+        mfa = 'pendiente'
+        const secreto = 'JBSWY3DPEHPK3PXP'
+        const uri = `otpauth://totp/TxoBank:demo?secret=${secreto}&issuer=TxoBank`
+        const qr =
+          'data:image/svg+xml;utf-8,' +
+          encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#fff"/><path d="M1 1h3v3H1zM6 1h3v3H6zM1 6h3v3H1zM6 6h1v1H6zM8 7h1v2H8zM6 8h1v1H6z" fill="#000"/></svg>',
+          )
+        return { factorId: 'factor-demo', qr, secreto, uri }
+      },
+      async confirmarMfa(_factorId, codigo) {
+        comprobarCodigo(codigo)
+        mfa = 'activa'
+      },
+      async verificarCodigo(codigo) {
+        comprobarCodigo(codigo)
+        if (sesion) sesion = { ...sesion, faltaCodigo: false }
+        emitir()
+      },
+      async desactivarMfa() {
+        mfa = 'no'
       },
     },
     ajustes: {

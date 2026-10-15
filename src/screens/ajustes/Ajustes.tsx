@@ -19,6 +19,7 @@ const ENLACES: { a: string; t: string; icono: NombreIcono; color: string }[] = [
   { a: '/ajustes/categorias', t: 'Categorías', icono: 'etiqueta', color: '#E64980' },
   { a: '/ajustes/grupos', t: 'Grupos de gastos', icono: 'movimientos', color: '#F76707' },
   { a: '/ajustes/otros-saldos', t: 'Otros saldos', icono: 'hucha', color: '#7950F2' },
+  { a: '/ajustes/seguridad', t: 'Seguridad', icono: 'candado', color: '#495057' },
 ]
 
 export function Ajustes() {
