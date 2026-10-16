@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { mitadesDeTraspaso, traspasoDeMitades } from '../../lib/economias'
 import { ErrorDatos } from '../types'
 import type {
+  DeEconomia,
+  Economia,
+  EconomiasApi,
+  NuevaEconomia,
   Ajustes,
   AjustesApi,
   CategoriasApi,
@@ -62,6 +67,19 @@ async function idUsuario(client: SupabaseClient): Promise<string> {
   return id
 }
 
+/**
+ * Economía activa, compartida por todas las APIs: las consultas se filtran por ella y lo nuevo se crea en ella.
+ * Las modificaciones y borrados van por id; el RLS ya impide tocar economías ajenas.
+ */
+export interface Ambito {
+  economiaId: string | null
+}
+
+function economia(ambito: Ambito): string {
+  if (!ambito.economiaId) throw new ErrorDatos('No hay ninguna economía elegida.')
+  return ambito.economiaId
+}
+
 // --- Ajustes ---------------------------------------------------------------
 
 interface FilaAjustes {
@@ -69,18 +87,21 @@ interface FilaAjustes {
   ahorro_valor: number | null
 }
 
-export function crearAjustesApi(client: SupabaseClient): AjustesApi {
+export function crearAjustesApi(client: SupabaseClient, ambito: Ambito): AjustesApi {
   return {
     async obtener(): Promise<Ajustes> {
-      const { data, error } = await client.from('ajustes').select('ahorro_tipo, ahorro_valor').maybeSingle()
+      const { data, error } = await client
+        .from('ajustes')
+        .select('ahorro_tipo, ahorro_valor')
+        .eq('economia_id', economia(ambito))
+        .maybeSingle()
       comprobar(error)
       const fila = data as FilaAjustes | null
       return { ahorroTipo: fila?.ahorro_tipo ?? null, ahorroValor: fila?.ahorro_valor ?? null }
     },
     async guardar(ajustes) {
-      const user_id = await idUsuario(client)
       const { error } = await client.from('ajustes').upsert({
-        user_id,
+        economia_id: economia(ambito),
         ahorro_tipo: ajustes.ahorroTipo,
         ahorro_valor: ajustes.ahorroValor,
         actualizado: new Date().toISOString(),
@@ -123,15 +144,24 @@ function aFilaCuenta(c: Partial<NuevaCuenta>): Record<string, unknown> {
   return f
 }
 
-export function crearCuentasApi(client: SupabaseClient): CuentasApi {
+export function crearCuentasApi(client: SupabaseClient, ambito: Ambito): CuentasApi {
   return {
     async listar() {
-      const { data, error } = await client.from('cuentas').select('*').order('orden').order('creado')
+      const { data, error } = await client
+        .from('cuentas')
+        .select('*')
+        .eq('economia_id', economia(ambito))
+        .order('orden')
+        .order('creado')
       comprobar(error)
       return (data as FilaCuenta[]).map(aCuenta)
     },
     async crear(cuenta) {
-      const { data, error } = await client.from('cuentas').insert(aFilaCuenta(cuenta)).select().single()
+      const { data, error } = await client
+        .from('cuentas')
+        .insert({ ...aFilaCuenta(cuenta), economia_id: economia(ambito) })
+        .select()
+        .single()
       comprobar(error)
       return aCuenta(data as FilaCuenta)
     },
@@ -176,20 +206,33 @@ function aFilaCategoria(c: Partial<NuevaCategoria>): Record<string, unknown> {
   return f
 }
 
-export function crearCategoriasApi(client: SupabaseClient): CategoriasApi {
+export function crearCategoriasApi(client: SupabaseClient, ambito: Ambito): CategoriasApi {
   return {
     async listar() {
-      const { data, error } = await client.from('categorias').select('*').order('orden').order('creado')
+      const { data, error } = await client
+        .from('categorias')
+        .select('*')
+        .eq('economia_id', economia(ambito))
+        .order('orden')
+        .order('creado')
       comprobar(error)
       return (data as FilaCategoria[]).map(aCategoria)
     },
     async crear(categoria) {
-      const { data, error } = await client.from('categorias').insert(aFilaCategoria(categoria)).select().single()
+      const { data, error } = await client
+        .from('categorias')
+        .insert({ ...aFilaCategoria(categoria), economia_id: economia(ambito) })
+        .select()
+        .single()
       comprobar(error)
       return aCategoria(data as FilaCategoria)
     },
     async crearVarias(categorias) {
-      const { data, error } = await client.from('categorias').insert(categorias.map(aFilaCategoria)).select()
+      const economia_id = economia(ambito)
+      const { data, error } = await client
+        .from('categorias')
+        .insert(categorias.map((c) => ({ ...aFilaCategoria(c), economia_id })))
+        .select()
       comprobar(error)
       return (data as FilaCategoria[]).map(aCategoria)
     },
@@ -229,6 +272,8 @@ interface FilaMovimiento {
   mes_imputado: string | null
   grupo_id: string | null
   hora: string | null
+  traspaso_id: string | null
+  economia_id: string
 }
 
 const aMovimiento = (f: FilaMovimiento): Movimiento => ({
@@ -247,6 +292,7 @@ const aMovimiento = (f: FilaMovimiento): Movimiento => ({
   grupoId: f.grupo_id ?? null,
   // Postgres devuelve la hora como "HH:MM:SS".
   hora: f.hora ? f.hora.slice(0, 5) : null,
+  traspasoId: f.traspaso_id ?? null,
 })
 
 function aFilaMovimiento(m: Partial<NuevoMovimiento>): Record<string, unknown> {
@@ -264,6 +310,7 @@ function aFilaMovimiento(m: Partial<NuevoMovimiento>): Record<string, unknown> {
   if (m.mesImputado !== undefined) f.mes_imputado = m.mesImputado
   if (m.grupoId !== undefined) f.grupo_id = m.grupoId
   if (m.hora !== undefined) f.hora = m.hora
+  if (m.traspasoId !== undefined) f.traspaso_id = m.traspasoId
   return f
 }
 
@@ -287,13 +334,21 @@ async function paginar<T>(
   }
 }
 
-export function crearMovimientosApi(client: SupabaseClient): MovimientosApi {
+export function crearMovimientosApi(client: SupabaseClient, ambito: Ambito): MovimientosApi {
+  const obtenerMitades = async (traspasoId: string) => {
+    const { data, error } = await client.from('movimientos').select('*').eq('traspaso_id', traspasoId)
+    comprobar(error)
+    return (data as FilaMovimiento[]).map((f): DeEconomia<Movimiento> => ({ ...aMovimiento(f), economiaId: f.economia_id }))
+  }
+
   return {
     async listar(desde, hasta) {
+      const economia_id = economia(ambito)
       const filas = await paginar<FilaMovimiento>((inicio, fin) =>
         client
           .from('movimientos')
           .select('*')
+          .eq('economia_id', economia_id)
           .gte('fecha', desde)
           .lte('fecha', hasta)
           .order('fecha', { ascending: false })
@@ -304,7 +359,11 @@ export function crearMovimientosApi(client: SupabaseClient): MovimientosApi {
       return filas.map(aMovimiento)
     },
     async crear(movimiento) {
-      const { data, error } = await client.from('movimientos').insert(aFilaMovimiento(movimiento)).select().single()
+      const { data, error } = await client
+        .from('movimientos')
+        .insert({ ...aFilaMovimiento(movimiento), economia_id: economia(ambito) })
+        .select()
+        .single()
       comprobar(error)
       return aMovimiento(data as FilaMovimiento)
     },
@@ -331,10 +390,12 @@ export function crearMovimientosApi(client: SupabaseClient): MovimientosApi {
       comprobar(error)
     },
     async listarPagosFijos(desde, hasta) {
+      const economia_id = economia(ambito)
       const filas = await paginar<FilaMovimiento>((inicio, fin) =>
         client
           .from('movimientos')
           .select('*')
+          .eq('economia_id', economia_id)
           .not('fijo_id', 'is', null)
           .gte('fijo_mes', desde)
           .lte('fijo_mes', hasta)
@@ -343,6 +404,37 @@ export function crearMovimientosApi(client: SupabaseClient): MovimientosApi {
           .range(inicio, fin),
       )
       return filas.map(aMovimiento)
+    },
+    async crearTraspasoEconomias(t) {
+      const { origen, destino } = mitadesDeTraspaso(t, crypto.randomUUID())
+      // Un solo insert con las dos filas: o se crean las dos o ninguna.
+      const { data, error } = await client
+        .from('movimientos')
+        .insert([
+          { ...aFilaMovimiento(origen), economia_id: t.origen.economiaId },
+          { ...aFilaMovimiento(destino), economia_id: t.destino.economiaId },
+        ])
+        .select()
+      comprobar(error)
+      const filas = data as FilaMovimiento[]
+      return aMovimiento(filas.find((f) => f.economia_id === ambito.economiaId) ?? filas[0])
+    },
+    async obtenerTraspasoEconomias(traspasoId) {
+      const mitades = await obtenerMitades(traspasoId)
+      return mitades.length === 2 ? traspasoDeMitades(mitades[0], mitades[1]) : null
+    },
+    async actualizarTraspasoEconomias(traspasoId, t) {
+      const mitades = await obtenerMitades(traspasoId)
+      const { origen, destino } = mitadesDeTraspaso(t, traspasoId)
+      for (const m of mitades) {
+        const cambios = m.tipo === 'gasto' ? origen : destino
+        const { error } = await client.from('movimientos').update(aFilaMovimiento(cambios)).eq('id', m.id)
+        comprobar(error)
+      }
+    },
+    async borrarTraspasoEconomias(traspasoId) {
+      const { error } = await client.from('movimientos').delete().eq('traspaso_id', traspasoId)
+      comprobar(error)
     },
   }
 }
@@ -358,6 +450,7 @@ interface FilaFijo {
   cuenta_id: string
   cuenta_destino_id: string | null
   categoria_id: string | null
+  categoria_destino_id: string | null
   dia_mes: number
   cada_meses: number
   desde: string
@@ -374,6 +467,7 @@ const aFijo = (f: FilaFijo): Fijo => ({
   cuentaId: f.cuenta_id,
   cuentaDestinoId: f.cuenta_destino_id,
   categoriaId: f.categoria_id,
+  categoriaDestinoId: f.categoria_destino_id ?? null,
   diaMes: f.dia_mes,
   cadaMeses: f.cada_meses,
   desde: f.desde,
@@ -390,6 +484,7 @@ function aFilaFijo(f: Partial<NuevoFijo>): Record<string, unknown> {
   if (f.cuentaId !== undefined) r.cuenta_id = f.cuentaId
   if (f.cuentaDestinoId !== undefined) r.cuenta_destino_id = f.cuentaDestinoId
   if (f.categoriaId !== undefined) r.categoria_id = f.categoriaId
+  if (f.categoriaDestinoId !== undefined) r.categoria_destino_id = f.categoriaDestinoId
   if (f.diaMes !== undefined) r.dia_mes = f.diaMes
   if (f.cadaMeses !== undefined) r.cada_meses = f.cadaMeses
   if (f.desde !== undefined) r.desde = f.desde
@@ -398,15 +493,19 @@ function aFilaFijo(f: Partial<NuevoFijo>): Record<string, unknown> {
   return r
 }
 
-export function crearFijosApi(client: SupabaseClient): FijosApi {
+export function crearFijosApi(client: SupabaseClient, ambito: Ambito): FijosApi {
   return {
     async listar() {
-      const { data, error } = await client.from('fijos').select('*').order('creado')
+      const { data, error } = await client.from('fijos').select('*').eq('economia_id', economia(ambito)).order('creado')
       comprobar(error)
       return (data as FilaFijo[]).map(aFijo)
     },
     async crear(fijo) {
-      const { data, error } = await client.from('fijos').insert(aFilaFijo(fijo)).select().single()
+      const { data, error } = await client
+        .from('fijos')
+        .insert({ ...aFilaFijo(fijo), economia_id: economia(ambito) })
+        .select()
+        .single()
       comprobar(error)
       return aFijo(data as FilaFijo)
     },
@@ -420,13 +519,14 @@ export function crearFijosApi(client: SupabaseClient): FijosApi {
       comprobar(error)
     },
     async listarOmitidos() {
-      const { data, error } = await client.from('fijos_omitidos').select('fijo_id, mes')
+      const { data, error } = await client.from('fijos_omitidos').select('fijo_id, mes').eq('economia_id', economia(ambito))
       comprobar(error)
       return (data as { fijo_id: string; mes: string }[]).map((f): FijoOmitido => ({ fijoId: f.fijo_id, mes: f.mes }))
     },
     async omitir(fijoId, mes) {
-      const user_id = await idUsuario(client)
-      const { error } = await client.from('fijos_omitidos').upsert({ user_id, fijo_id: fijoId, mes })
+      const { error } = await client
+        .from('fijos_omitidos')
+        .upsert({ economia_id: economia(ambito), fijo_id: fijoId, mes })
       comprobar(error)
     },
     async quitarOmision(fijoId, mes) {
@@ -434,15 +534,19 @@ export function crearFijosApi(client: SupabaseClient): FijosApi {
       comprobar(error)
     },
     async listarFechas() {
-      const { data, error } = await client.from('fijos_fechas').select('fijo_id, mes, fecha')
+      const { data, error } = await client
+        .from('fijos_fechas')
+        .select('fijo_id, mes, fecha')
+        .eq('economia_id', economia(ambito))
       comprobar(error)
       return (data as { fijo_id: string; mes: string; fecha: string }[]).map(
         (f): FijoFecha => ({ fijoId: f.fijo_id, mes: f.mes, fecha: f.fecha }),
       )
     },
     async fijarFecha(fijoId, mes, fecha) {
-      const user_id = await idUsuario(client)
-      const { error } = await client.from('fijos_fechas').upsert({ user_id, fijo_id: fijoId, mes, fecha })
+      const { error } = await client
+        .from('fijos_fechas')
+        .upsert({ economia_id: economia(ambito), fijo_id: fijoId, mes, fecha })
       comprobar(error)
     },
     async quitarFecha(fijoId, mes) {
@@ -454,35 +558,44 @@ export function crearFijosApi(client: SupabaseClient): FijosApi {
 
 // --- Presupuestos y saldos -------------------------------------------------
 
-export function crearPresupuestosApi(client: SupabaseClient): PresupuestosApi {
+export function crearPresupuestosApi(client: SupabaseClient, ambito: Ambito): PresupuestosApi {
   return {
     async listar() {
-      const { data, error } = await client.from('presupuestos').select('id, mes, categoria_id, importe').order('mes')
+      const { data, error } = await client
+        .from('presupuestos')
+        .select('id, mes, categoria_id, importe')
+        .eq('economia_id', economia(ambito))
+        .order('mes')
       comprobar(error)
       return (data as { id: string; mes: string; categoria_id: string | null; importe: number | null }[]).map(
         (f): Presupuesto => ({ id: f.id, mes: f.mes, categoriaId: f.categoria_id, importe: f.importe }),
       )
     },
     async eliminarPosteriores(mes, categoriaId) {
-      let consulta = client.from('presupuestos').delete().gt('mes', mes)
+      let consulta = client.from('presupuestos').delete().eq('economia_id', economia(ambito)).gt('mes', mes)
       consulta = categoriaId === null ? consulta.is('categoria_id', null) : consulta.eq('categoria_id', categoriaId)
       const { error } = await consulta
       comprobar(error)
     },
     async guardar(mes, categoriaId, importe) {
-      const user_id = await idUsuario(client)
       const { error } = await client
         .from('presupuestos')
-        .upsert({ user_id, mes, categoria_id: categoriaId, importe }, { onConflict: 'user_id,mes,categoria_id' })
+        .upsert(
+          { economia_id: economia(ambito), mes, categoria_id: categoriaId, importe },
+          { onConflict: 'economia_id,mes,categoria_id' },
+        )
       comprobar(error)
     },
   }
 }
 
-export function crearSaldosApi(client: SupabaseClient): SaldosApi {
+export function crearSaldosApi(client: SupabaseClient, ambito: Ambito): SaldosApi {
   return {
     async listar() {
-      const { data, error } = await client.from('saldos_cuentas').select('cuenta_id, saldo')
+      const { data, error } = await client
+        .from('saldos_cuentas')
+        .select('cuenta_id, saldo')
+        .eq('economia_id', economia(ambito))
       comprobar(error)
       return (data as { cuenta_id: string; saldo: number | string }[]).map((f) => ({
         cuentaId: f.cuenta_id,
@@ -519,15 +632,24 @@ function aFilaGrupo(g: Partial<NuevoGrupo>): Record<string, unknown> {
   return r
 }
 
-export function crearGruposApi(client: SupabaseClient): GruposApi {
+export function crearGruposApi(client: SupabaseClient, ambito: Ambito): GruposApi {
   return {
     async listar() {
-      const { data, error } = await client.from('grupos').select('*').order('orden').order('creado')
+      const { data, error } = await client
+        .from('grupos')
+        .select('*')
+        .eq('economia_id', economia(ambito))
+        .order('orden')
+        .order('creado')
       comprobar(error)
       return (data as FilaGrupo[]).map(aGrupo)
     },
     async crear(grupo) {
-      const { data, error } = await client.from('grupos').insert(aFilaGrupo(grupo)).select().single()
+      const { data, error } = await client
+        .from('grupos')
+        .insert({ ...aFilaGrupo(grupo), economia_id: economia(ambito) })
+        .select()
+        .single()
       comprobar(error)
       return aGrupo(data as FilaGrupo)
     },
@@ -587,15 +709,24 @@ const aActualizacion = (f: FilaActualizacion): ActualizacionSaldo => ({
   fechaHora: f.fecha_hora,
 })
 
-export function crearOtrosSaldosApi(client: SupabaseClient): OtrosSaldosApi {
+export function crearOtrosSaldosApi(client: SupabaseClient, ambito: Ambito): OtrosSaldosApi {
   return {
     async listar() {
-      const { data, error } = await client.from('otros_saldos').select('*').order('orden').order('creado')
+      const { data, error } = await client
+        .from('otros_saldos')
+        .select('*')
+        .eq('economia_id', economia(ambito))
+        .order('orden')
+        .order('creado')
       comprobar(error)
       return (data as FilaOtroSaldo[]).map(aOtroSaldo)
     },
     async crear(otro) {
-      const { data, error } = await client.from('otros_saldos').insert(aFilaOtroSaldo(otro)).select().single()
+      const { data, error } = await client
+        .from('otros_saldos')
+        .insert({ ...aFilaOtroSaldo(otro), economia_id: economia(ambito) })
+        .select()
+        .single()
       comprobar(error)
       return aOtroSaldo(data as FilaOtroSaldo)
     },
@@ -614,10 +745,12 @@ export function crearOtrosSaldosApi(client: SupabaseClient): OtrosSaldosApi {
       comprobar(error)
     },
     async listarHistorial() {
+      const economia_id = economia(ambito)
       const filas = await paginar<FilaActualizacion>((inicio, fin) =>
         client
           .from('otros_saldos_historial')
           .select('id, otro_saldo_id, saldo, fecha_hora')
+          .eq('economia_id', economia_id)
           .order('fecha_hora')
           .order('id')
           .range(inicio, fin),
@@ -625,7 +758,7 @@ export function crearOtrosSaldosApi(client: SupabaseClient): OtrosSaldosApi {
       return filas.map(aActualizacion)
     },
     async registrarSaldo(otroSaldoId, saldo, fechaHora) {
-      const fila: Record<string, unknown> = { otro_saldo_id: otroSaldoId, saldo }
+      const fila: Record<string, unknown> = { otro_saldo_id: otroSaldoId, saldo, economia_id: economia(ambito) }
       if (fechaHora) fila.fecha_hora = fechaHora
       const { data, error } = await client.from('otros_saldos_historial').insert(fila).select().single()
       comprobar(error)
@@ -638,10 +771,10 @@ export function crearOtrosSaldosApi(client: SupabaseClient): OtrosSaldosApi {
   }
 }
 
-// --- Mantenimiento ---------------------------------------------------------
+// --- Economías --------------------------------------------------------------
 
-/** Tablas en un orden que respeta las claves foráneas (primero lo que apunta a otras). */
-const TABLAS_DEL_USUARIO = [
+/** Tablas de una economía en un orden que respeta las claves foráneas (primero lo que apunta a otras). */
+const TABLAS_DE_LA_ECONOMIA = [
   'movimientos',
   'fijos_fechas',
   'fijos_omitidos',
@@ -655,14 +788,134 @@ const TABLAS_DEL_USUARIO = [
   'ajustes',
 ]
 
+/** Borra una economía con todos sus datos, tabla a tabla (las claves entre tablas no se borran en cascada). */
+async function borrarEconomia(client: SupabaseClient, id: string): Promise<void> {
+  // Los fijos de otras economías que traspasan dinero a esta se quedan como gastos normales.
+  const { data: cuentas, error: errorCuentas } = await client.from('cuentas').select('id').eq('economia_id', id)
+  comprobar(errorCuentas)
+  const ids = (cuentas as { id: string }[]).map((c) => c.id)
+  if (ids.length > 0) {
+    const { error } = await client
+      .from('fijos')
+      .update({ cuenta_destino_id: null, categoria_destino_id: null })
+      .eq('tipo', 'gasto')
+      .in('cuenta_destino_id', ids)
+    comprobar(error)
+  }
+  for (const tabla of TABLAS_DE_LA_ECONOMIA) {
+    const { error } = await client.from(tabla).delete().eq('economia_id', id)
+    comprobar(error)
+  }
+  const { error } = await client.from('economias').delete().eq('id', id)
+  comprobar(error)
+}
+
+interface FilaEconomia {
+  id: string
+  propietario_id: string
+  nombre: string
+  color: string
+  orden: number
+}
+
+const aEconomia = (f: FilaEconomia, userId: string): Economia => ({
+  id: f.id,
+  nombre: f.nombre,
+  color: f.color,
+  orden: f.orden,
+  propia: f.propietario_id === userId,
+})
+
+function aFilaEconomia(e: Partial<NuevaEconomia>): Record<string, unknown> {
+  const r: Record<string, unknown> = {}
+  if (e.nombre !== undefined) r.nombre = e.nombre
+  if (e.color !== undefined) r.color = e.color
+  if (e.orden !== undefined) r.orden = e.orden
+  return r
+}
+
+export function crearEconomiasApi(client: SupabaseClient, ambito: Ambito): EconomiasApi {
+  return {
+    async listar() {
+      const userId = await idUsuario(client)
+      const { data, error } = await client.from('economias').select('*').order('orden').order('creado')
+      comprobar(error)
+      return (data as FilaEconomia[]).map((f) => aEconomia(f, userId))
+    },
+    async crear(e) {
+      const userId = await idUsuario(client)
+      const { data, error } = await client.from('economias').insert(aFilaEconomia(e)).select().single()
+      comprobar(error)
+      return aEconomia(data as FilaEconomia, userId)
+    },
+    async actualizar(id, cambios) {
+      const userId = await idUsuario(client)
+      const { data, error } = await client.from('economias').update(aFilaEconomia(cambios)).eq('id', id).select().single()
+      comprobar(error)
+      return aEconomia(data as FilaEconomia, userId)
+    },
+    async borrar(id) {
+      await borrarEconomia(client, id)
+    },
+    activar(id) {
+      ambito.economiaId = id
+    },
+    activa() {
+      return ambito.economiaId
+    },
+    async cuentasDeTodas() {
+      const { data, error } = await client.from('cuentas').select('*').order('orden').order('creado')
+      comprobar(error)
+      return (data as (FilaCuenta & { economia_id: string })[]).map((f) => ({ ...aCuenta(f), economiaId: f.economia_id }))
+    },
+    async categoriasDeTodas() {
+      const { data, error } = await client.from('categorias').select('*').order('orden').order('creado')
+      comprobar(error)
+      return (data as (FilaCategoria & { economia_id: string })[]).map((f) => ({
+        ...aCategoria(f),
+        economiaId: f.economia_id,
+      }))
+    },
+    async saldosDeTodas() {
+      const { data, error } = await client.from('saldos_cuentas').select('cuenta_id, saldo, economia_id')
+      comprobar(error)
+      return (data as { cuenta_id: string; saldo: number | string; economia_id: string }[]).map((f) => ({
+        cuentaId: f.cuenta_id,
+        saldo: Number(f.saldo),
+        economiaId: f.economia_id,
+      }))
+    },
+    async otrosSaldosDeTodas() {
+      const { data, error } = await client.from('otros_saldos').select('*').order('orden').order('creado')
+      comprobar(error)
+      return (data as (FilaOtroSaldo & { economia_id: string })[]).map((f) => ({
+        ...aOtroSaldo(f),
+        economiaId: f.economia_id,
+      }))
+    },
+    async historialDeTodas() {
+      const filas = await paginar<FilaActualizacion>((inicio, fin) =>
+        client
+          .from('otros_saldos_historial')
+          .select('id, otro_saldo_id, saldo, fecha_hora')
+          .order('fecha_hora')
+          .order('id')
+          .range(inicio, fin),
+      )
+      return filas.map(aActualizacion)
+    },
+  }
+}
+
+// --- Mantenimiento ---------------------------------------------------------
+
 export function crearMantenimientoApi(client: SupabaseClient): MantenimientoApi {
   return {
     async borrarTodo() {
       const userId = await idUsuario(client)
-      for (const tabla of TABLAS_DEL_USUARIO) {
-        const { error } = await client.from(tabla).delete().eq('user_id', userId)
-        comprobar(error)
-      }
+      const { data, error } = await client.from('economias').select('id').eq('propietario_id', userId)
+      comprobar(error)
+      for (const { id } of data as { id: string }[]) await borrarEconomia(client, id)
     },
   }
 }

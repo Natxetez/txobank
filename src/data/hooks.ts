@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { dataSource } from './index'
-import type { Ajustes, Fecha, NuevaCategoria, NuevaCuenta, NuevoMovimiento } from './types'
+import type { Ajustes, Fecha, Movimiento, NuevaCategoria, NuevaCuenta, NuevoMovimiento, TraspasoEconomias } from './types'
 
 export const useCuentas = () => useQuery({ queryKey: ['cuentas'], queryFn: () => dataSource.cuentas.listar() })
 export const useCategorias = () => useQuery({ queryKey: ['categorias'], queryFn: () => dataSource.categorias.listar() })
@@ -91,20 +91,45 @@ export function useAccionesMovimiento() {
   const qc = useQueryClient()
   return useMemo(() => {
     const refrescar = () => invalidar(qc, 'movimientos', 'saldos')
+    async function crear(m: NuevoMovimiento) {
+      const r = await dataSource.movimientos.crear(m)
+      await refrescar()
+      return r
+    }
+    /** Crea las dos mitades de un traspaso entre economías; devuelve la de esta economía. */
+    async function crearTraspaso(t: TraspasoEconomias) {
+      const r = await dataSource.movimientos.crearTraspasoEconomias(t)
+      await refrescar()
+      return r
+    }
     return {
-      async crear(m: NuevoMovimiento) {
-        const r = await dataSource.movimientos.crear(m)
-        await refrescar()
-        return r
-      },
+      crear,
+      crearTraspaso,
       async actualizar(id: string, cambios: Partial<NuevoMovimiento>) {
         const r = await dataSource.movimientos.actualizar(id, cambios)
         await refrescar()
         return r
       },
+      async actualizarTraspaso(traspasoId: string, t: TraspasoEconomias) {
+        await dataSource.movimientos.actualizarTraspasoEconomias(traspasoId, t)
+        await refrescar()
+      },
       async borrar(id: string) {
         await dataSource.movimientos.borrar(id)
         await refrescar()
+      },
+      /**
+       * Borra un movimiento (con su otra mitad, si es un traspaso entre economías) y devuelve cómo
+       * deshacerlo, para el aviso con "Deshacer".
+       */
+      async eliminar(m: Movimiento): Promise<() => Promise<unknown>> {
+        const traspaso = m.traspasoId ? await dataSource.movimientos.obtenerTraspasoEconomias(m.traspasoId) : null
+        if (m.traspasoId) await dataSource.movimientos.borrarTraspasoEconomias(m.traspasoId)
+        else await dataSource.movimientos.borrar(m.id)
+        await refrescar()
+        if (traspaso) return () => crearTraspaso(traspaso)
+        const { id: _id, ...copia } = m
+        return () => crear({ ...copia, traspasoId: null })
       },
     }
   }, [qc])

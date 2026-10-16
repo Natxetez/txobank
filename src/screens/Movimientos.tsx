@@ -86,9 +86,8 @@ export function Movimientos() {
 
   async function eliminar(m: Movimiento) {
     try {
-      await acciones.borrar(m.id)
-      const { id: _id, ...copia } = m
-      aviso.mostrar('Movimiento eliminado', { etiqueta: 'Deshacer', alHacer: () => acciones.crear(copia) })
+      const deshacer = await acciones.eliminar(m)
+      aviso.mostrar('Movimiento eliminado', { etiqueta: 'Deshacer', alHacer: deshacer })
     } catch (err) {
       aviso.mostrar(mensajeError(err))
     }
@@ -102,7 +101,12 @@ export function Movimientos() {
     const detalle =
       m.tipo === 'traspaso'
         ? `${origen} → ${destino}`
-        : [m.nota ? cat?.nombre : null, origen, m.tipo === 'devolucion' ? 'Devolución' : null]
+        : [
+            m.nota ? cat?.nombre : null,
+            origen,
+            m.tipo === 'devolucion' ? 'Devolución' : null,
+            m.traspasoId ? 'Traspaso entre economías' : null,
+          ]
             .filter(Boolean)
             .join(' · ')
     const imputado = m.mesImputado ? `Cuenta para ${nombreMes(m.mesImputado)}` : null

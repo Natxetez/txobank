@@ -35,6 +35,7 @@ function mov(p: Partial<Movimiento>): Movimiento {
     fijoMes: null,
     mesImputado: null,
     grupoId: null,
+    traspasoId: null,
     hora: null,
     ...p,
   }

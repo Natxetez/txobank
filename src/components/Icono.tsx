@@ -36,6 +36,7 @@ const TRAZOS = {
     </>
   ),
   check: <path d="M20 6 9 17l-5-5" />,
+  capas: <path d="m12 3 9 5-9 5-9-5zM3 12.5l9 5 9-5M3 17l9 5 9-5" />,
   reloj: (
     <>
       <circle cx="12" cy="12" r="9" />

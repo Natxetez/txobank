@@ -70,7 +70,7 @@ export function detectarFrecuentes(
 ): Frecuente[] {
   const grupos = new Map<string, Movimiento[]>()
   for (const m of movs) {
-    if (m.tipo !== 'gasto' || m.fijoId || m.grupoId || !m.categoriaId || !m.nota.trim() || !enVentana(m, hoy, dias)) continue
+    if (m.tipo !== 'gasto' || m.fijoId || m.grupoId || m.traspasoId || !m.categoriaId || !m.nota.trim() || !enVentana(m, hoy, dias)) continue
     const clave = `${normalizarConcepto(m.nota)}|${m.categoriaId}`
     grupos.set(clave, [...(grupos.get(clave) ?? []), m])
   }

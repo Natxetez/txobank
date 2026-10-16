@@ -194,6 +194,7 @@ export function movimientoDePago(
     mesImputado: imputable ? mes : null,
     grupoId: null,
     hora: null,
+    traspasoId: null,
   }
 }
 
@@ -217,6 +218,7 @@ export function fijoDesdeMovimiento(
       cuentaId: m.cuentaId,
       cuentaDestinoId: m.cuentaDestinoId,
       categoriaId: m.categoriaId,
+      categoriaDestinoId: null,
       diaMes: diaDeFecha(m.fecha),
       cadaMeses: 1,
       desde: mes,
@@ -235,6 +237,10 @@ export function validarFijo(f: NuevoFijo): string | null {
     if (f.cuentaDestinoId === f.cuentaId) return 'La cuenta de origen y la de destino deben ser distintas.'
   } else if (!f.categoriaId) {
     return 'Elige una categoría.'
+  } else if (f.cuentaDestinoId !== null) {
+    // Traspaso a otra economía: un gasto aquí que entra como ingreso allí.
+    if (f.tipo !== 'gasto') return 'Solo los traspasos llevan cuenta de destino.'
+    if (!f.categoriaDestinoId) return 'Elige en qué categoría de ingreso entra en la otra economía.'
   }
   if (!Number.isInteger(f.diaMes) || f.diaMes < 1 || f.diaMes > 31) return 'El día del mes debe estar entre 1 y 31.'
   if (!/^\d{4}-\d{2}-01$/.test(f.desde)) return 'Elige el primer mes en que toca.'

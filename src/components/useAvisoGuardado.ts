@@ -29,7 +29,8 @@ export function useAvisoGuardado() {
 
   return useCallback(
     async (creado: Movimiento, deshacer?: () => Promise<unknown>) => {
-      const accion = { etiqueta: 'Deshacer', alHacer: deshacer ?? (() => acciones.borrar(creado.id)) }
+      // Por defecto se borra (con su otra mitad, si es un traspaso entre economías).
+      const accion = { etiqueta: 'Deshacer', alHacer: deshacer ?? (() => acciones.eliminar(creado)) }
       const basico = `${NOMBRE_TIPO[creado.tipo]} de ${fmt(creado.importe)} guardado`
       aviso.mostrar(basico, accion)
       if (creado.tipo !== 'gasto' || !creado.categoriaId) return
@@ -47,7 +48,10 @@ export function useAvisoGuardado() {
           control,
           fmt,
         })
-        if (extra.texto) aviso.mostrar(`${basico}. ${extra.texto}`, accion, extra.destacado)
+        if (extra.texto) {
+          const texto = extra.texto[0].toUpperCase() + extra.texto.slice(1)
+          aviso.mostrar(`${basico}. ${texto}`, accion, extra.destacado)
+        }
       } catch {
         /* el aviso básico ya se ha mostrado */
       }

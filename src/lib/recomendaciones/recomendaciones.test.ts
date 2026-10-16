@@ -30,6 +30,7 @@ function mov(p: Partial<Movimiento>): Movimiento {
     fijoMes: null,
     mesImputado: null,
     grupoId: null,
+    traspasoId: null,
     hora: null,
     ...p,
   }
@@ -50,6 +51,7 @@ function fijo(p: Partial<Fijo> = {}): Fijo {
     desde: '2026-01-01',
     hasta: null,
     activo: true,
+    categoriaDestinoId: null,
     ...p,
   }
 }

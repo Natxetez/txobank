@@ -20,6 +20,7 @@ import { categoriasPorDefecto, colorPorPosicion } from '../lib/catalogo'
 import { parseImporte } from '../lib/dinero'
 import { mesActual } from '../lib/meses'
 import { useFmt } from '../components/Discreto'
+import { useEconomia } from '../data/EconomiaContext'
 
 const TOTAL_PASOS = 3
 
@@ -30,6 +31,9 @@ const TOTAL_PASOS = 3
  */
 export function Asistente({ onTerminar }: { onTerminar: () => void }) {
   const fmt = useFmt()
+  const { economias, activa, cambiar } = useEconomia()
+  // En una economía nueva (no la primera) se puede volver a otra sin terminar el asistente.
+  const otra = economias.find((e) => e.id !== activa.id)
   const cuentas = useCuentas()
   const categorias = useCategorias()
   const fijos = useFijos()
@@ -83,13 +87,17 @@ export function Asistente({ onTerminar }: { onTerminar: () => void }) {
   return (
     <main className="asistente">
       <p className="secundario paso">
-        Paso {paso} de {TOTAL_PASOS}
+        {otra ? `${activa.nombre} · ` : ''}Paso {paso} de {TOTAL_PASOS}
       </p>
 
       {paso === 1 && (
         <>
-          <h1>Bienvenido a TxoBank</h1>
-          <p className="secundario">Empecemos por tu primera cuenta. Podrás añadir más después.</p>
+          <h1>{otra ? `Configura ${activa.nombre}` : 'Tu primera cuenta'}</h1>
+          <p className="secundario">
+            {otra
+              ? `Empecemos por la primera cuenta de ${activa.nombre}. Podrás añadir más después.`
+              : 'Empecemos por tu primera cuenta. Podrás añadir más después.'}
+          </p>
           <FormCuenta
             colorPorDefecto={colorPorPosicion(0)}
             orden={0}
@@ -166,6 +174,12 @@ export function Asistente({ onTerminar }: { onTerminar: () => void }) {
             </Hoja>
           )}
         </>
+      )}
+
+      {otra && (
+        <button className="texto" onClick={() => cambiar(otra.id)}>
+          Volver a {otra.nombre}
+        </button>
       )}
     </main>
   )

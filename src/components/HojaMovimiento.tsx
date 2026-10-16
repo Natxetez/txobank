@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useEconomia } from '../data/EconomiaContext'
 import {
   mensajeError,
   useAccionesMovimiento,
@@ -8,9 +10,17 @@ import {
   useCuentas,
   useMovimientos,
 } from '../data/hooks'
-import type { Grupo, Movimiento, NuevoMovimiento, TipoCategoria, TipoMovimiento } from '../data/types'
+import type {
+  Grupo,
+  Movimiento,
+  NuevoMovimiento,
+  TipoCategoria,
+  TipoMovimiento,
+  TraspasoEconomias,
+} from '../data/types'
 import { colorPorPosicion } from '../lib/catalogo'
 import { aTextoEditable, parseImporte } from '../lib/dinero'
+import { validarTraspasoEconomias } from '../lib/economias'
 import { fijoDesdeMovimiento } from '../lib/fijos'
 import { ordenarGrupos, siguienteOrdenGrupo, validarGrupo } from '../lib/grupos'
 import { horaActual, hoyISO, mesDeFecha, nombreMes, sumarDias, sumarMeses } from '../lib/meses'
@@ -23,10 +33,17 @@ import {
   validarMovimiento,
 } from '../lib/movimientos'
 import type { Frecuente } from '../lib/movimientos'
-import { useAccionesFijos, useAccionesGrupos, useGrupos } from '../data/consultas'
+import {
+  opcTraspasoEconomias,
+  useAccionesFijos,
+  useAccionesGrupos,
+  useCategoriasDeTodas,
+  useGrupos,
+} from '../data/consultas'
 import { useAviso } from './Avisos'
 import { useFmt } from './Discreto'
 import { Hoja } from './Hoja'
+import { OpcionesCuentas, useCuentasConEconomia } from './OpcionesCuentas'
 import { useAvisoGuardado } from './useAvisoGuardado'
 
 /** Datos con los que rellenar una hoja nueva (por ejemplo al duplicar). */
@@ -50,7 +67,29 @@ const ETIQUETA_GUARDAR: Record<TipoMovimiento, string> = {
   traspaso: 'Guardar traspaso',
 }
 
-export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
+/**
+ * Hoja de nuevo movimiento o de edición. Si el movimiento es una mitad de un traspaso entre economías,
+ * primero carga el traspaso completo para editar las dos mitades a la vez.
+ */
+export function HojaMovimiento(props: Props) {
+  const traspasoId = props.peticion.tipo === 'editar' ? props.peticion.movimiento.traspasoId : null
+  const traspaso = useQuery({ ...opcTraspasoEconomias(traspasoId ?? ''), enabled: traspasoId !== null })
+  if (traspasoId && traspaso.isPending) {
+    return (
+      <Hoja titulo="Editar movimiento" onCerrar={props.onCerrar}>
+        <p className="secundario">Cargando…</p>
+      </Hoja>
+    )
+  }
+  return <FormularioMovimiento {...props} traspaso={traspasoId ? (traspaso.data ?? null) : null} />
+}
+
+function FormularioMovimiento({
+  peticion,
+  onCerrar,
+  onDuplicar,
+  traspaso,
+}: Props & { traspaso: TraspasoEconomias | null }) {
   const hoy = hoyISO()
   const aviso = useAviso()
   const acciones = useAccionesMovimiento()
@@ -63,9 +102,25 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
   const recientes = useMovimientos(sumarDias(hoy, -90), hoy).data ?? []
   const grupos = useGrupos().data ?? []
   const accionesGrupos = useAccionesGrupos()
+  const { activa } = useEconomia()
+  const { todas, economiaDe, nombreEconomia, agrupar } = useCuentasConEconomia()
+  const categoriasDeTodas = useCategoriasDeTodas().data ?? []
 
   const editando = peticion.tipo === 'editar' ? peticion.movimiento : null
-  const base: Plantilla = peticion.tipo === 'editar' ? peticion.movimiento : (peticion.plantilla ?? {})
+  // Un traspaso entre economías se edita como traspaso, con las cuentas de sus dos mitades.
+  const base: Plantilla = traspaso
+    ? {
+        tipo: 'traspaso',
+        importe: traspaso.importe,
+        fecha: traspaso.fecha,
+        cuentaId: traspaso.origen.cuentaId,
+        cuentaDestinoId: traspaso.destino.cuentaId,
+        nota: traspaso.nota,
+        descripcion: traspaso.descripcion,
+      }
+    : peticion.tipo === 'editar'
+      ? peticion.movimiento
+      : (peticion.plantilla ?? {})
   const esPlantilla = peticion.tipo === 'nuevo' && peticion.plantilla !== undefined
 
   const cuentasActivas = cuentas.filter((c) => !c.archivada)
@@ -106,6 +161,9 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
   )
   const [hora, setHora] = useState(editando ? (editando.hora ?? '') : horaActual())
   const [nuevoGrupo, setNuevoGrupo] = useState<{ nombre: string; categoriaId: string | null } | null>(null)
+  // Traspaso entre economías: categoría de gasto en el origen y de ingreso en el destino.
+  const [catOrigen, setCatOrigen] = useState(traspaso?.origen.categoriaId ?? '')
+  const [catDestino, setCatDestino] = useState(traspaso?.destino.categoriaId ?? '')
 
   const tipoMov: TipoMovimiento = tipoUi === 'ingreso' && devolucion ? 'devolucion' : tipoUi
   const tipoCat: TipoCategoria = tipoUi === 'ingreso' && !devolucion ? 'ingreso' : 'gasto'
@@ -129,7 +187,18 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
       : []
   const sugerencias = enfocado && tipoUi !== 'traspaso' && !enGrupo ? sugerirConceptos(nota, recientes, tipoCat) : []
 
-  const cuentaPropia = cuentas.find((c) => c.id === cuentaId)
+  // En los traspasos se puede elegir una cuenta de otra economía (si hay más de una).
+  const ecoOrigen = economiaDe(cuentaId)
+  const ecoDestino = economiaDe(destinoId)
+  const entreEconomias = tipoUi === 'traspaso' && destinoId !== '' && ecoOrigen !== ecoDestino
+  const categoriasEn = (economiaId: string, tipo: TipoCategoria, elegida: string) =>
+    categoriasDeTodas.filter((c) => c.economiaId === economiaId && c.tipo === tipo && (!c.archivada || c.id === elegida))
+  const opcionesCatOrigen = entreEconomias ? categoriasEn(ecoOrigen, 'gasto', catOrigen) : []
+  const opcionesCatDestino = entreEconomias ? categoriasEn(ecoDestino, 'ingreso', catDestino) : []
+  const catOrigenValida = opcionesCatOrigen.some((c) => c.id === catOrigen) ? catOrigen : ''
+  const catDestinoValida = opcionesCatDestino.some((c) => c.id === catDestino) ? catDestino : ''
+
+  const cuentaPropia = todas.find((c) => c.id === cuentaId)
   const opcionesCuenta = cuentas.filter((c) => !c.archivada || c.id === cuentaId)
   const opcionesDestino = cuentas.filter((c) => !c.archivada || c.id === destinoId)
   const mesPropio = mesDeFecha(fecha)
@@ -137,6 +206,8 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
   function cambiarTipo(t: TipoUi) {
     if (t === tipoUi) return
     setTipoUi(t)
+    // Fuera de los traspasos solo valen cuentas de esta economía.
+    if (!cuentas.some((c) => c.id === cuentaId)) setCuentaId(cuentaPorDefecto())
     setDevolucion(false)
     setCategoriaId(null)
     setNueva(null)
@@ -238,6 +309,8 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
     if (centimos === null) return setError('Escribe un importe válido.')
 
     const esTraspaso = tipoMov === 'traspaso'
+    if (entreEconomias) return guardarEntreEconomias(centimos)
+    if (ecoOrigen !== activa.id) return setError(`Elige una cuenta de ${activa.nombre}.`)
     const mesImputado = !esIngresoPuro || imputar === 'propio' ? null : sumarMeses(mesPropio, imputar === 'antes' ? -1 : 1)
     const datos = {
       tipo: tipoMov,
@@ -263,7 +336,12 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
 
     setEnviando(true)
     try {
-      if (editando) {
+      if (editando?.traspasoId) {
+        // Deja de ser un traspaso entre economías: se apunta el nuevo y se borran las dos mitades.
+        await acciones.crear({ ...datos, fijoId: null, fijoMes: null, traspasoId: null })
+        await acciones.eliminar(editando)
+        aviso.mostrar('Cambios guardados')
+      } else if (editando) {
         await acciones.actualizar(editando.id, datos)
         aviso.mostrar('Cambios guardados')
       } else if (crearFijo) {
@@ -272,7 +350,14 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
         const fijo = await accionesFijos.crear(plan.fijo)
         let creado
         try {
-          creado = await acciones.crear({ ...datos, fijoId: fijo.id, fijoMes: plan.mes, grupoId: null, hora: horaActual() })
+          creado = await acciones.crear({
+            ...datos,
+            fijoId: fijo.id,
+            fijoMes: plan.mes,
+            grupoId: null,
+            hora: horaActual(),
+            traspasoId: null,
+          })
         } catch (err) {
           await accionesFijos.borrar(fijo.id).catch(() => undefined)
           throw err
@@ -282,8 +367,80 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
           await accionesFijos.borrar(fijo.id)
         })
       } else {
-        const nuevoMov: NuevoMovimiento = { ...datos, fijoId: null, fijoMes: null }
+        const nuevoMov: NuevoMovimiento = { ...datos, fijoId: null, fijoMes: null, traspasoId: null }
         void avisar(await acciones.crear(nuevoMov))
+      }
+      onCerrar()
+    } catch (err) {
+      setError(mensajeError(err))
+      setEnviando(false)
+    }
+  }
+
+  /** Traspaso a una cuenta de otra economía: un gasto en la de origen y un ingreso en la de destino. */
+  async function guardarEntreEconomias(centimos: number) {
+    if (ecoOrigen !== activa.id && ecoDestino !== activa.id) {
+      return setError(`Una de las dos cuentas tiene que ser de ${activa.nombre}.`)
+    }
+    const t: TraspasoEconomias = {
+      importe: centimos,
+      fecha,
+      hora: traspaso ? traspaso.hora : (editando?.hora ?? horaActual()),
+      nota: nota.trim(),
+      descripcion: descripcion.trim(),
+      origen: { economiaId: ecoOrigen, cuentaId, categoriaId: catOrigenValida },
+      destino: { economiaId: ecoDestino, cuentaId: destinoId, categoriaId: catDestinoValida },
+      fijoId: traspaso?.fijoId ?? null,
+      fijoMes: traspaso?.fijoMes ?? null,
+    }
+    const fallo = validarTraspasoEconomias(t)
+    if (fallo) return setError(fallo)
+    const crearFijo = esFijo && !editando
+    if (crearFijo && !t.nota) return setError('Escribe un concepto: será el nombre del fijo.')
+    if (crearFijo && ecoOrigen !== activa.id) {
+      return setError(`Para que sea fijo, la cuenta de origen tiene que ser de ${activa.nombre}.`)
+    }
+
+    setEnviando(true)
+    try {
+      if (editando?.traspasoId && traspaso) {
+        await acciones.actualizarTraspaso(editando.traspasoId, t)
+        aviso.mostrar('Cambios guardados')
+      } else if (editando) {
+        // Pasa a ser un traspaso entre economías: se apunta el nuevo y se borra el anterior.
+        await acciones.crearTraspaso(t)
+        await acciones.eliminar(editando)
+        aviso.mostrar('Cambios guardados')
+      } else if (crearFijo) {
+        const mes = mesDeFecha(fecha)
+        const fijo = await accionesFijos.crear({
+          nombre: t.nota,
+          descripcion: t.descripcion,
+          tipo: 'gasto',
+          importe: centimos,
+          cuentaId,
+          cuentaDestinoId: destinoId,
+          categoriaId: t.origen.categoriaId,
+          categoriaDestinoId: t.destino.categoriaId,
+          diaMes: Number(fecha.slice(8)),
+          cadaMeses: 1,
+          desde: mes,
+          hasta: null,
+          activo: true,
+        })
+        let creado
+        try {
+          creado = await acciones.crearTraspaso({ ...t, fijoId: fijo.id, fijoMes: mes })
+        } catch (err) {
+          await accionesFijos.borrar(fijo.id).catch(() => undefined)
+          throw err
+        }
+        void avisar(creado, async () => {
+          await acciones.eliminar(creado)
+          await accionesFijos.borrar(fijo.id)
+        })
+      } else {
+        void avisar(await acciones.crearTraspaso(t))
       }
       onCerrar()
     } catch (err) {
@@ -296,9 +453,8 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
     if (!editando) return
     setEnviando(true)
     try {
-      await acciones.borrar(editando.id)
-      const { id: _id, ...copia } = editando
-      aviso.mostrar('Movimiento eliminado', { etiqueta: 'Deshacer', alHacer: () => acciones.crear(copia) })
+      const deshacer = await acciones.eliminar(editando)
+      aviso.mostrar('Movimiento eliminado', { etiqueta: 'Deshacer', alHacer: deshacer })
       onCerrar()
     } catch (err) {
       setError(mensajeError(err))
@@ -310,7 +466,7 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
     if (!editando) return
     const { id: _id, ...copia } = editando
     // Conserva el grupo; la copia es de hoy y de ahora.
-    onDuplicar({ ...copia, fecha: hoy, hora: horaActual(), fijoId: null, fijoMes: null, mesImputado: null })
+    onDuplicar({ ...copia, fecha: hoy, hora: horaActual(), fijoId: null, fijoMes: null, mesImputado: null, traspasoId: null })
   }
 
   const chipCategoria = (c: { id: string; nombre: string; icono: string | null }) => (
@@ -498,19 +654,44 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
             <label className="campo">
               Desde
               <select value={cuentaId} onChange={(e) => setCuentaId(e.target.value)}>
-                {opcionesCuenta.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
+                <OpcionesCuentas cuentas={opcionesCuenta} porEconomia={agrupar(cuentaId)} />
               </select>
             </label>
             <label className="campo">
               Hacia
               <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)}>
                 <option value="">Elige…</option>
-                {opcionesDestino.map((c) => (
+                <OpcionesCuentas cuentas={opcionesDestino} porEconomia={agrupar(destinoId)} />
+              </select>
+            </label>
+          </div>
+        )}
+
+        {entreEconomias && (
+          <div className="entre-economias">
+            <p className="ayuda">
+              Traspaso entre economías: cuenta como gasto en {nombreEconomia(ecoOrigen)} y como ingreso en{' '}
+              {nombreEconomia(ecoDestino)}.
+            </p>
+            <label className="campo">
+              Gasto en {nombreEconomia(ecoOrigen)}
+              <select value={catOrigenValida} onChange={(e) => setCatOrigen(e.target.value)}>
+                <option value="">Elige categoría…</option>
+                {opcionesCatOrigen.map((c) => (
                   <option key={c.id} value={c.id}>
+                    {c.icono ? `${c.icono} ` : ''}
+                    {c.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="campo">
+              Ingreso en {nombreEconomia(ecoDestino)}
+              <select value={catDestinoValida} onChange={(e) => setCatDestino(e.target.value)}>
+                <option value="">Elige categoría…</option>
+                {opcionesCatDestino.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.icono ? `${c.icono} ` : ''}
                     {c.nombre}
                   </option>
                 ))}
@@ -619,6 +800,7 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
         )}
 
         {cuentaPropia?.archivada && <p className="secundario pequeno">Esta cuenta está archivada.</p>}
+
         {error && (
           <p className="error" role="alert">
             {error}
@@ -647,10 +829,12 @@ export function HojaMovimiento({ peticion, onCerrar, onDuplicar }: Props) {
               </button>
             </div>
           ) : (
-            <div className="dos-columnas">
-              <button type="button" className="secundario-btn" onClick={duplicar}>
-                Duplicar
-              </button>
+            <div className={traspaso ? '' : 'dos-columnas'}>
+              {!traspaso && (
+                <button type="button" className="secundario-btn" onClick={duplicar}>
+                  Duplicar
+                </button>
+              )}
               <button type="button" className="secundario-btn borrar" onClick={() => setConfirmarBorrado(true)}>
                 Eliminar
               </button>

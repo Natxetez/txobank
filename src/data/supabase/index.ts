@@ -7,6 +7,7 @@ import {
   crearAjustesApi,
   crearCategoriasApi,
   crearCuentasApi,
+  crearEconomiasApi,
   crearFijosApi,
   crearGruposApi,
   crearMantenimientoApi,
@@ -15,6 +16,7 @@ import {
   crearPresupuestosApi,
   crearSaldosApi,
 } from './datos'
+import type { Ambito } from './datos'
 
 /** Sesión del dominio, con si falta el código de la verificación en dos pasos (nivel aal1 cuando se exige aal2). */
 async function aSesion(client: SupabaseClient, s: Session | null): Promise<Sesion | null> {
@@ -53,6 +55,7 @@ export function crearSupabaseDataSource(): DataSource {
     throw new Error('Faltan VITE_SUPABASE_URL o VITE_SUPABASE_PUBLISHABLE_KEY (ver .env.example).')
   }
   const client = createClient(config.supabaseUrl, config.supabaseKey)
+  const ambito: Ambito = { economiaId: null }
 
   return {
     sesion: {
@@ -119,15 +122,16 @@ export function crearSupabaseDataSource(): DataSource {
         await client.auth.refreshSession()
       },
     },
-    ajustes: crearAjustesApi(client),
-    cuentas: crearCuentasApi(client),
-    categorias: crearCategoriasApi(client),
-    movimientos: crearMovimientosApi(client),
-    fijos: crearFijosApi(client),
-    presupuestos: crearPresupuestosApi(client),
-    saldos: crearSaldosApi(client),
-    grupos: crearGruposApi(client),
-    otrosSaldos: crearOtrosSaldosApi(client),
+    economias: crearEconomiasApi(client, ambito),
+    ajustes: crearAjustesApi(client, ambito),
+    cuentas: crearCuentasApi(client, ambito),
+    categorias: crearCategoriasApi(client, ambito),
+    movimientos: crearMovimientosApi(client, ambito),
+    fijos: crearFijosApi(client, ambito),
+    presupuestos: crearPresupuestosApi(client, ambito),
+    saldos: crearSaldosApi(client, ambito),
+    grupos: crearGruposApi(client, ambito),
+    otrosSaldos: crearOtrosSaldosApi(client, ambito),
     mantenimiento: crearMantenimientoApi(client),
   }
 }

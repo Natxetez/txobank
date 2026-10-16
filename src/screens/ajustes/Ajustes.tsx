@@ -9,6 +9,7 @@ import { useSesion } from '../../data/SesionContext'
 import { mensajeError } from '../../data/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { Hoja } from '../../components/Hoja'
+import { useEconomia } from '../../data/EconomiaContext'
 import { VERSION } from '../../version'
 
 const ENLACES: { a: string; t: string; icono: NombreIcono; color: string }[] = [
@@ -24,6 +25,7 @@ const ENLACES: { a: string; t: string; icono: NombreIcono; color: string }[] = [
 
 export function Ajustes() {
   const sesion = useSesion()
+  const { activa, economias } = useEconomia()
   const qc = useQueryClient()
   const [exportando, setExportando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,6 +52,21 @@ export function Ajustes() {
   return (
     <section className="pantalla ancho">
       <h1>Ajustes</h1>
+      <nav className="lista" aria-label="Economía">
+        <Link to="/ajustes/economias" className="fila">
+          <IconoCategoria color={activa.color}>
+            <Icono nombre="capas" />
+          </IconoCategoria>
+          <span className="fila-texto">
+            <span>Economías</span>
+            <span className="secundario pequeno">
+              {economias.length > 1 ? `Estás en ${activa.nombre} · ${economias.length} economías` : `Estás en ${activa.nombre}`}
+            </span>
+          </span>
+          <Icono nombre="derecha" className="chevron" />
+        </Link>
+      </nav>
+      <p className="secundario pequeno ajustes-de">Ajustes de {activa.nombre}</p>
       <nav className="lista" aria-label="Ajustes">
         {ENLACES.map((e) => (
           <Link key={e.a} to={e.a} className="fila">
@@ -148,8 +165,8 @@ function ZonaPruebas() {
             }}
           >
             <p className="aviso-suma">
-              Se borrarán todos tus datos: movimientos, fijos, presupuestos, grupos, otros saldos, categorías,
-              cuentas y ajustes. Tu usuario se mantiene. No se puede deshacer.
+              Se borrarán todas tus economías con todos sus datos: movimientos, fijos, presupuestos, grupos, otros
+              saldos, categorías, cuentas y ajustes. Tu usuario se mantiene. No se puede deshacer.
             </p>
             <label className="campo">
               Escribe BORRAR para confirmar

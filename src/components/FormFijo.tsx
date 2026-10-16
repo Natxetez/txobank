@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { useCategoriasDeTodas } from '../data/consultas'
 import { mensajeError, useCategorias, useCuentas } from '../data/hooks'
 import type { Fijo, NuevoFijo } from '../data/types'
+import { esTraspasoAOtraEconomia } from '../lib/economias'
 import { PERIODICIDADES, esPuntual, validarFijo } from '../lib/fijos'
+import { OpcionesCuentas, useCuentasConEconomia } from './OpcionesCuentas'
 import { aTextoEditable, parseImporte } from '../lib/dinero'
 import type { Mes } from '../data/types'
 import { diaDeFecha, fechaEnMes, hoyISO, mesActual, mesDeFecha } from '../lib/meses'
@@ -26,6 +29,8 @@ const UNA_VEZ = 0
 export function FormFijo({ inicial, mesInicial, etiquetaGuardar, onGuardar }: Props) {
   const cuentas = useCuentas().data ?? []
   const categorias = useCategorias().data ?? []
+  const categoriasDeTodas = useCategoriasDeTodas().data ?? []
+  const { economiaDe, nombreEconomia, agrupar } = useCuentasConEconomia()
   const cuentasActivas = cuentas.filter((c) => !c.archivada || c.id === inicial?.cuentaId || c.id === inicial?.cuentaDestinoId)
 
   const mesBase = inicial?.desde ?? mesInicial ?? mesActual()
@@ -33,11 +38,13 @@ export function FormFijo({ inicial, mesInicial, etiquetaGuardar, onGuardar }: Pr
 
   const [nombre, setNombre] = useState(inicial?.nombre ?? '')
   const [descripcion, setDescripcion] = useState(inicial?.descripcion ?? '')
-  const [tipo, setTipo] = useState<Fijo['tipo']>(inicial?.tipo ?? 'gasto')
+  // Un traspaso a otra economía se guarda como gasto con cuenta de destino, pero se edita como traspaso.
+  const [tipo, setTipo] = useState<Fijo['tipo']>(inicial && esTraspasoAOtraEconomia(inicial) ? 'traspaso' : (inicial?.tipo ?? 'gasto'))
   const [importe, setImporte] = useState(inicial ? aTextoEditable(inicial.importe) : '')
   const [cuentaId, setCuentaId] = useState(inicial?.cuentaId ?? cuentas.find((c) => !c.archivada)?.id ?? '')
   const [destinoId, setDestinoId] = useState(inicial?.cuentaDestinoId ?? '')
   const [categoriaId, setCategoriaId] = useState(inicial?.categoriaId ?? '')
+  const [categoriaDestinoId, setCategoriaDestinoId] = useState(inicial?.categoriaDestinoId ?? '')
   const [diaMes, setDiaMes] = useState(String(diaBase))
   const [cadaMeses, setCadaMeses] = useState(inicial && esPuntual(inicial) ? UNA_VEZ : (inicial?.cadaMeses ?? 1))
   const [desde, setDesde] = useState(aMesInput(mesBase))
@@ -51,6 +58,15 @@ export function FormFijo({ inicial, mesInicial, etiquetaGuardar, onGuardar }: Pr
   const categoriasDelTipo = categorias.filter(
     (c) => c.tipo === (tipo === 'ingreso' ? 'ingreso' : 'gasto') && (!c.archivada || c.id === categoriaId),
   )
+  // Traspaso a una cuenta de otra economía: aquí cuenta como gasto y allí entra como ingreso.
+  const economiaDestino = destinoId ? economiaDe(destinoId) : null
+  const entreEconomias = tipo === 'traspaso' && economiaDestino !== null && economiaDestino !== economiaDe(cuentaId)
+  const categoriasDestino = entreEconomias
+    ? categoriasDeTodas.filter(
+        (c) => c.economiaId === economiaDestino && c.tipo === 'ingreso' && (!c.archivada || c.id === categoriaDestinoId),
+      )
+    : []
+  const catDestinoValida = categoriasDestino.some((c) => c.id === categoriaDestinoId) ? categoriaDestinoId : ''
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
@@ -62,11 +78,12 @@ export function FormFijo({ inicial, mesInicial, etiquetaGuardar, onGuardar }: Pr
     const datos: NuevoFijo = {
       nombre: nombre.trim(),
       descripcion: descripcion.trim(),
-      tipo,
+      tipo: entreEconomias ? 'gasto' : tipo,
       importe: centimos,
       cuentaId,
       cuentaDestinoId: tipo === 'traspaso' ? destinoId || null : null,
-      categoriaId: tipo === 'traspaso' ? null : categoriaId || null,
+      categoriaId: tipo === 'traspaso' && !entreEconomias ? null : categoriaId || null,
+      categoriaDestinoId: entreEconomias ? catDestinoValida || null : null,
       diaMes: mesUnico ? diaDeFecha(fechaUnica) : Number(diaMes),
       cadaMeses: mesUnico ? 1 : cadaMeses,
       desde: mesUnico ?? (desde ? deMesInput(desde) : ''),
@@ -131,17 +148,46 @@ export function FormFijo({ inicial, mesInicial, etiquetaGuardar, onGuardar }: Pr
         </select>
       </label>
       {tipo === 'traspaso' ? (
-        <label className="campo">
-          Hacia la cuenta
-          <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)}>
-            <option value="">Elige…</option>
-            {cuentasActivas.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
+        <>
+          <label className="campo">
+            Hacia la cuenta
+            <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)}>
+              <option value="">Elige…</option>
+              <OpcionesCuentas cuentas={cuentasActivas} porEconomia={agrupar(destinoId)} />
+            </select>
+          </label>
+          {entreEconomias && economiaDestino && (
+            <div className="entre-economias">
+              <p className="ayuda">
+                Traspaso a otra economía: aquí cuenta como gasto y en {nombreEconomia(economiaDestino)} como ingreso.
+              </p>
+              <label className="campo">
+                Categoría del gasto
+                <select value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)}>
+                  <option value="">Elige…</option>
+                  {categoriasDelTipo.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.icono ? `${c.icono} ` : ''}
+                      {c.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="campo">
+                Ingreso en {nombreEconomia(economiaDestino)}
+                <select value={catDestinoValida} onChange={(e) => setCategoriaDestinoId(e.target.value)}>
+                  <option value="">Elige…</option>
+                  {categoriasDestino.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.icono ? `${c.icono} ` : ''}
+                      {c.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+        </>
       ) : (
         <label className="campo">
           Categoría

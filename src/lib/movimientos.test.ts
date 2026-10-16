@@ -29,6 +29,7 @@ function mov(parcial: Partial<Movimiento>): Movimiento {
     fijoMes: null,
     mesImputado: null,
     grupoId: null,
+    traspasoId: null,
     hora: null,
     ...parcial,
   }
@@ -46,6 +47,7 @@ describe('validarMovimiento', () => {
     categoriaId: 'comida',
     mesImputado: null,
     grupoId: null,
+    traspasoId: null,
     hora: null,
   }
 

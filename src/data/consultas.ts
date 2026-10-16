@@ -8,7 +8,7 @@ import { finDeMes, hoyISO, mesActual, sumarMeses } from '../lib/meses'
 import { planCambioPresupuesto } from '../lib/presupuestos'
 import type { Alcance } from '../lib/presupuestos'
 import { dataSource } from './index'
-import type { FechaHora, Fecha, Mes, Movimiento, NuevoGrupo, NuevoOtroSaldo, Presupuesto } from './types'
+import type { FechaHora, Fecha, Mes, Movimiento, NuevaEconomia, NuevoGrupo, NuevoOtroSaldo, Presupuesto } from './types'
 
 export const opcMovimientos = (desde: Fecha, hasta: Fecha) => ({
   queryKey: ['movimientos', desde, hasta] as const,
@@ -38,6 +38,33 @@ export const opcHistorialSaldos = () => ({
   queryKey: ['historialSaldos'] as const,
   queryFn: () => dataSource.otrosSaldos.listarHistorial(),
 })
+// Datos de todas las economías (traspasos entre economías y patrimonio total). Las claves empiezan como las
+// de la economía activa para que se refresquen a la vez.
+export const opcCuentasDeTodas = () => ({
+  queryKey: ['cuentas', 'todas'] as const,
+  queryFn: () => dataSource.economias.cuentasDeTodas(),
+})
+export const opcCategoriasDeTodas = () => ({
+  queryKey: ['categorias', 'todas'] as const,
+  queryFn: () => dataSource.economias.categoriasDeTodas(),
+})
+export const opcSaldosDeTodas = () => ({
+  queryKey: ['saldos', 'todas'] as const,
+  queryFn: () => dataSource.economias.saldosDeTodas(),
+})
+export const opcOtrosSaldosDeTodas = () => ({
+  queryKey: ['otrosSaldos', 'todas'] as const,
+  queryFn: () => dataSource.economias.otrosSaldosDeTodas(),
+})
+export const opcHistorialDeTodas = () => ({
+  queryKey: ['historialSaldos', 'todas'] as const,
+  queryFn: () => dataSource.economias.historialDeTodas(),
+})
+export const opcTraspasoEconomias = (traspasoId: string) => ({
+  queryKey: ['movimientos', 'traspaso', traspasoId] as const,
+  queryFn: () => dataSource.movimientos.obtenerTraspasoEconomias(traspasoId),
+})
+
 export const opcPresupuestos = () => ({ queryKey: ['presupuestos'] as const, queryFn: () => dataSource.presupuestos.listar() })
 export const opcAjustes = () => ({ queryKey: ['ajustes'] as const, queryFn: () => dataSource.ajustes.obtener() })
 
@@ -115,6 +142,33 @@ export const useFechasFijos = () => useQuery(opcFechasFijos())
 export const useGrupos = () => useQuery(opcGrupos())
 export const useOtrosSaldos = () => useQuery(opcOtrosSaldos())
 export const useHistorialSaldos = () => useQuery(opcHistorialSaldos())
+export const useCuentasDeTodas = () => useQuery(opcCuentasDeTodas())
+export const useCategoriasDeTodas = () => useQuery(opcCategoriasDeTodas())
+
+/** Acciones sobre economías. Para cambiar de economía, `useEconomia().cambiar`. */
+export function useAccionesEconomias() {
+  const qc = useQueryClient()
+  return useMemo(
+    () => ({
+      async crear(e: NuevaEconomia) {
+        const r = await dataSource.economias.crear(e)
+        await qc.invalidateQueries({ queryKey: ['economias'] })
+        return r
+      },
+      async actualizar(id: string, cambios: Partial<NuevaEconomia>) {
+        const r = await dataSource.economias.actualizar(id, cambios)
+        await qc.invalidateQueries({ queryKey: ['economias'] })
+        return r
+      },
+      /** Borra la economía y todos sus datos; refresca todo (puede haber traspasos y fijos que apuntaban a ella). */
+      async borrar(id: string) {
+        await dataSource.economias.borrar(id)
+        await qc.invalidateQueries()
+      },
+    }),
+    [qc],
+  )
+}
 
 /** Acciones sobre grupos de gastos: refrescan los grupos y los movimientos. */
 export function useAccionesGrupos() {

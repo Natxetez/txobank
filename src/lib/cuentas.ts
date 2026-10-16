@@ -27,6 +27,7 @@ export function traspasoDeCierre(
     fijoMes: null,
     mesImputado: null,
     grupoId: null,
+    traspasoId: null,
   }
 }
 

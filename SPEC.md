@@ -15,6 +15,7 @@
 ### Incluido en la v1
 
 - Inicio de sesión con usuario y contraseña. La conexión a la base de datos queda fija en la configuración de la app.
+- **Economías** ("Personal", "Casa"): con un solo usuario, varias economías separadas, cada una con sus cuentas, categorías, movimientos, fijos, presupuestos, grupos, otros saldos y ajustes. Traspasos entre economías y patrimonio total de todas (sección 5).
 - Varias cuentas (corriente, ahorro, efectivo, tarjeta) con saldo inicial y saldo actual.
 - Otros saldos fuera de las cuentas (banco virtual, inversiones…) que solo se actualizan a mano, para ver el patrimonio completo.
 - Grupos de gastos ("Cafés y pintxos") para no llenar la lista de gastos sueltos repetidos.
@@ -39,7 +40,8 @@
 - Bloqueo con código al abrir la app.
 - Uso sin conexión.
 - Notificaciones y recomendaciones con IA (ambas necesitan un servidor).
-- Varias monedas y varios usuarios.
+- Varias monedas.
+- Compartir una economía con otro usuario (la base de datos ya está preparada: `economias_miembros`; falta la invitación en la app).
 
 ## 3. Stack
 
@@ -76,9 +78,10 @@ Configuración:
 ### Capa de datos intercambiable
 
 - Las pantallas **nunca** importan `@supabase/supabase-js`. Todo pasa por una interfaz `DataSource` definida en `src/data/types.ts`.
-- Los tipos del dominio (`Cuenta`, `Categoria`, `Presupuesto`, `Movimiento`, `Fijo`, `Ajustes`, `Saldo`, `Grupo`, `OtroSaldo`, `ActualizacionSaldo`) son TypeScript puro, sin depender de Supabase. Cada adaptador traduce entre sus filas y estos tipos.
+- Los tipos del dominio (`Economia`, `Cuenta`, `Categoria`, `Presupuesto`, `Movimiento`, `TraspasoEconomias`, `Fijo`, `Ajustes`, `Saldo`, `Grupo`, `OtroSaldo`, `ActualizacionSaldo`) son TypeScript puro, sin depender de Supabase. Cada adaptador traduce entre sus filas y estos tipos.
 - Implementación inicial en `src/data/supabase/`. El adaptador se elige al compilar con `VITE_DATA_BACKEND`: usar otra base de datos en el futuro = escribir otro adaptador que cumpla la misma interfaz y cambiar la variable.
-- La interfaz cubre: sesión (iniciar y cerrar, sesión actual, cambios de sesión), ajustes, cuentas, categorías, presupuestos, movimientos (listar por rango de fechas con filtros, crear, editar, borrar), fijos (incluidos sus pagos, omisiones y fechas cambiadas para un mes), saldos, grupos de gastos, otros saldos con su historial y, mientras la app está en pruebas, "borrar todo".
+- La interfaz cubre: sesión (iniciar y cerrar, sesión actual, cambios de sesión), economías (listar, crear, editar, borrar, elegir la activa y datos de todas para los traspasos y el patrimonio total), ajustes, cuentas, categorías, presupuestos, movimientos (listar por rango de fechas con filtros, crear, editar, borrar, y crear, editar y borrar traspasos entre economías), fijos (incluidos sus pagos, omisiones y fechas cambiadas para un mes), saldos, grupos de gastos, otros saldos con su historial y, mientras la app está en pruebas, "borrar todo".
+- **Economía activa**: el resto de la interfaz trabaja siempre sobre la economía elegida con `economias.activar(id)`; el adaptador filtra cada consulta por ella y crea en ella lo nuevo. Al cambiar de economía la app descarta la caché y vuelve a montar las pantallas.
 - Control del mes, fijos, estadísticas y recomendaciones se calculan en `src/lib/` como funciones puras sobre los datos, sin depender de la base de datos.
 - Supabase devuelve por defecto como máximo 1000 filas por consulta: el adaptador debe paginar al listar movimientos y pagos de fijos.
 - Además del adaptador de Supabase hay uno en memoria con datos de ejemplo (`VITE_DATA_BACKEND=memoria`, `npm run dev:memoria`; con `?vacio` en la dirección arranca sin datos). Sirve para probar la interfaz sin base de datos; los datos se pierden al recargar.
@@ -87,13 +90,43 @@ Configuración:
 
 Todos los importes se guardan en **céntimos** como enteros (`bigint`). Nunca decimales en coma flotante. Los campos de tipo "mes" son un `date` que siempre cae en día 1.
 
-Todas las tablas llevan `user_id uuid not null default auth.uid() references auth.users on delete cascade`.
+Todas las tablas de datos llevan `economia_id uuid not null references economias on delete cascade` (la economía a la que pertenecen) y `user_id uuid not null default auth.uid() references auth.users on delete cascade` (quién creó la fila).
 
-### ajustes (una fila por usuario)
+### economias
 
 | Columna | Tipo | Notas |
 |---|---|---|
-| user_id | uuid | PK |
+| id | uuid | PK |
+| propietario_id | uuid | FK auth.users; default `auth.uid()` |
+| nombre | text | obligatorio; único por propietario |
+| color | text | hex de la paleta |
+| orden | int | |
+| creado | timestamptz | |
+
+- Todo lo demás (cuentas, categorías, movimientos, fijos, presupuestos, grupos, otros saldos y ajustes) pertenece a una economía. Las categorías y los nombres de grupo son únicos dentro de cada economía.
+- La app recuerda en el dispositivo la última economía usada y entra en ella; se cambia desde Inicio (selector arriba) o desde Ajustes → Economías.
+- Al borrar una economía se borran todos sus datos. Los traspasos con otras economías se quedan en la otra parte como gastos o ingresos normales, y los fijos de otras economías que le traspasaban dinero pasan a ser gastos normales.
+
+### economias_miembros
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| economia_id | uuid | FK economias (`on delete cascade`) |
+| user_id | uuid | FK auth.users |
+
+PK `(economia_id, user_id)`. Usuarios con acceso a una economía además de su propietario. Hoy no se usa desde la app: queda preparada para compartir una economía (por ejemplo, la de casa con mi pareja).
+
+### Traspasos entre economías
+
+- Un traspaso a una cuenta de otra economía se guarda como **dos movimientos enlazados** por `traspaso_id`: un **gasto** en la economía de origen y un **ingreso** en la de destino, cada uno con su categoría (por ejemplo, gasto "Casa" en Personal e ingreso "Aportaciones" en Casa). Así cuenta en el "Te quedan" de las dos y el patrimonio total no cambia.
+- Las dos mitades se crean en un solo insert (las dos o ninguna), se editan juntas y se borran juntas, desde cualquiera de las dos economías.
+- Un fijo puede ser un traspaso a otra economía (la aportación mensual): se guarda como **gasto** con `cuenta_destino_id` (de la otra economía) y `categoria_destino_id` (de ingreso, en la otra). Para el control del mes es un gasto fijo normal; al marcarlo como pagado se crean las dos mitades. En la economía de destino no aparece como fijo: el ingreso se ve cuando se paga.
+
+### ajustes (una fila por economía)
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| economia_id | uuid | PK |
 | ahorro_tipo | text null | `importe` o `porcentaje` |
 | ahorro_valor | bigint null | céntimos si es importe; puntos porcentuales si es porcentaje |
 | actualizado | timestamptz | |
@@ -116,7 +149,7 @@ Todas las tablas llevan `user_id uuid not null default auth.uid() references aut
 | Columna | Tipo | Notas |
 |---|---|---|
 | id | uuid | PK |
-| nombre | text | único por usuario y tipo |
+| nombre | text | único por economía y tipo |
 | tipo | text | `gasto` o `ingreso` |
 | color | text | hex |
 | icono | text | un emoji, opcional |
@@ -134,7 +167,7 @@ Todas las tablas llevan `user_id uuid not null default auth.uid() references aut
 | importe | bigint null | céntimos, mayor que 0; null = sin presupuesto desde ese mes |
 | creado | timestamptz | |
 
-- `unique nulls not distinct (user_id, mes, categoria_id)`, para que el presupuesto total (categoría nula) tampoco se duplique y se pueda hacer `upsert` por esas columnas.
+- `unique nulls not distinct (economia_id, mes, categoria_id)`, para que el presupuesto total (categoría nula) tampoco se duplique y se pueda hacer `upsert` por esas columnas.
 - Cómo se usa: sección 6.
 
 ### movimientos
@@ -155,6 +188,7 @@ Todas las tablas llevan `user_id uuid not null default auth.uid() references aut
 | mes_imputado | date null | solo en ingresos: mes al que cuenta, si no es el de su fecha (sección 6) |
 | grupo_id | uuid null | FK grupos (`on delete set null`); solo en gastos |
 | hora | time null | hora del movimiento; la app la rellena con la hora actual al crearlo |
+| traspaso_id | uuid null | enlaza las dos mitades de un traspaso entre economías (solo gasto o ingreso) |
 | creado | timestamptz | |
 
 Restricciones:
@@ -165,7 +199,8 @@ Restricciones:
 - CHECK: si hay `fijo_id`, hay `fijo_mes`. No se exige la inversa: al borrar un fijo, `on delete set null` deja `fijo_id` a nulo y `fijo_mes` se queda, y un "los dos o ninguno" estricto haría fallar ese borrado.
 - `unique (fijo_id, fijo_mes)`: un fijo se paga como mucho una vez por mes. Los NULL no chocan, así que no afecta a los movimientos normales.
 - Que el tipo de la categoría encaje con el del movimiento se valida en la app.
-- Índice en `(user_id, fecha)`.
+- CHECK: `traspaso_id` solo en gastos e ingresos.
+- Índices en `(economia_id, fecha)` y en `traspaso_id`.
 
 ### fijos
 
@@ -176,7 +211,8 @@ Restricciones:
 | descripcion | text | texto libre opcional (compañía, contrato…); pasa al movimiento al pagarlo; default '' |
 | tipo | text | `gasto`, `ingreso` o `traspaso` |
 | importe | bigint | importe previsto, en céntimos |
-| cuenta_id, cuenta_destino_id, categoria_id | | igual que en movimientos |
+| cuenta_id, cuenta_destino_id, categoria_id | | igual que en movimientos, salvo en los traspasos a otra economía |
+| categoria_destino_id | uuid null | solo en traspasos a otra economía: categoría de ingreso en la de destino |
 | dia_mes | int | 1 a 31: día habitual del cargo |
 | cada_meses | int | 1 mensual, 2 bimestral, 3 trimestral, 6 semestral, 12 anual; default 1 |
 | desde | date | primer mes en que toca; en los no mensuales marca también en qué meses tocan |
@@ -208,7 +244,7 @@ PK `(fijo_id, mes)`.
 | Columna | Tipo | Notas |
 |---|---|---|
 | id | uuid | PK |
-| nombre | text | nombre libre ("Cafés y pintxos"); único por usuario |
+| nombre | text | nombre libre ("Cafés y pintxos"); único por economía |
 | categoria_id | uuid | FK categorias (de gasto, `on delete restrict`): categoría de todas sus entradas |
 | orden | int | |
 | archivado | boolean | default false |
@@ -239,21 +275,23 @@ El saldo actual de cada uno es el de su actualización más reciente.
 
 ### saldos_cuentas (vista)
 
-Vista con `security_invoker = on` (para que respete RLS) que devuelve `cuenta_id` y `saldo`: saldo inicial + ingresos + devoluciones − gastos − traspasos salientes + traspasos entrantes, contando solo movimientos con `fecha <= current_date`.
+Vista con `security_invoker = on` (para que respete RLS) que devuelve `cuenta_id`, `saldo` y `economia_id`: saldo inicial + ingresos + devoluciones − gastos − traspasos salientes + traspasos entrantes, contando solo movimientos con `fecha <= current_date`.
 
 ### Seguridad (obligatorio en todas las tablas)
 
 ```sql
 alter table public.cuentas enable row level security;
 
-create policy "solo_propietario" on public.cuentas
+create policy "acceso_a_la_economia" on public.cuentas
   for all to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+  using (economia_id in (select privado.mis_economias()))
+  with check (economia_id in (select privado.mis_economias()));
 
 grant select, insert, update, delete on public.cuentas to authenticated;
 ```
 
+- `privado.mis_economias()` (security definer, en un esquema que la API no expone) devuelve las economías de las que el usuario es propietario o miembro.
+- `economias`: cada uno ve las suyas y aquellas de las que es miembro; solo el propietario las crea, cambia y borra. `economias_miembros`: las ven los miembros; solo el propietario añade o quita.
 - Mismo patrón para `ajustes`, `categorias`, `presupuestos`, `movimientos`, `fijos`, `fijos_omitidos`, `fijos_fechas`, `grupos`, `otros_saldos` y `otros_saldos_historial`; en la vista, `grant select ... to authenticated`.
 - **El GRANT explícito es imprescindible**: desde el 30 de mayo de 2026, los proyectos nuevos de Supabase no exponen las tablas de `public` a la API de datos por defecto. Sin GRANT, supabase-js devuelve error de permisos aunque RLS esté bien.
 - Nada para el rol `anon`. Registro de usuarios desactivado; el único usuario se crea a mano.
@@ -315,6 +353,7 @@ Es el corazón de la app. Toda la lógica va en `src/lib/` como funciones puras 
 - **Pagos adelantados o tardíos**: el pago se asigna al mes del pendiente desde el que lo marco (por ejemplo, el alquiler de octubre cobrado el 30 de septiembre queda como pagado en octubre). En gastos, eso solo afecta a la lista de fijos; el gasto cuenta en el mes de su fecha. En ingresos, además, rellena `mes_imputado`.
 - **Crear y editar un fijo**: desde Ajustes → Fijos, desde la lista de fijos del mes en Inicio o en Fijos del mes (**Añadir fijo**; tocar un fijo sin pagar lo abre para editarlo), desde el asistente de primera vez, o desde el formulario de nuevo movimiento con el interruptor **Es fijo**, que crea el fijo con esos datos (mensual por defecto, día del cargo = día de la fecha) y deja este mes como pagado.
 - Editar un fijo no cambia los pagos pasados. Eliminarlo no borra los movimientos ya pagados (se quedan sin fijo). Pausarlo lo saca de los meses siguientes.
+- **Traspasos a otra economía** (la aportación mensual a la cuenta común): en el formulario es un traspaso cuya cuenta de destino es de otra economía, con la categoría del gasto aquí y la del ingreso allí. Cuenta como fijo de gasto; al marcarlo como pagado se apuntan las dos mitades (sección 5).
 - Coste mensual equivalente = importe / `cada_meses`; coste anual = importe × 12 / `cada_meses`.
 
 ## 8. Pantallas
@@ -323,7 +362,9 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 
 **Inicio de sesión.** Ver sección 4. Abajo, discreta, la versión de la app ("v1.2.0 (a1b2c3d)").
 
-**Primera vez.** Asistente corto; todos los pasos, salvo el primero, se pueden saltar:
+**Primera economía.** Antes del asistente, si no hay ninguna economía, se pide el nombre de la primera ("Personal" por defecto), explicando qué es una economía.
+
+**Primera vez.** Asistente corto, en cada economía nueva; todos los pasos, salvo el primero, se pueden saltar. En una economía que no es la primera, el asistente lleva su nombre y un botón para volver a otra economía sin terminarlo:
 1. Crear la primera cuenta (nombre, tipo, saldo inicial).
 2. Mi mes: presupuesto total del mes u objetivo de ahorro.
 3. Mis fijos: añadir los principales (alquiler, luz, nómina...).
@@ -332,6 +373,7 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
    - Ingreso: Nómina 💼, Otros ingresos ➕.
 
 **Inicio.**
+- Arriba, la **economía activa** (punto de color y nombre). Al tocarla, una hoja para cambiar a otra, crear una nueva o ir a Ajustes → Economías.
 - Selector de mes (‹ septiembre ›).
 - Cifra protagonista: **disponible** ("Te quedan 412 €") con el disponible por día debajo ("27 € al día durante 15 días") y el color del estado. Debajo, una barra de gasto neto frente al límite, con la parte fija y la variable diferenciadas.
 - Icono de ojo para el **modo discreto**: sustituye todos los importes de la app por "•••" hasta que se vuelve a tocar (recordado en el dispositivo).
@@ -341,7 +383,7 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 - **Fijos del mes**: resumen ("4 de 7 pagados: 620 € de 740 €") y lista con los pendientes primero; los que ya deberían haberse cobrado, destacados. Cada pendiente tiene sus botones **Pagado**, **Cambiar fecha** y **Omitir**; al final, **Añadir fijo**.
 - Presupuestos del mes por categoría: una barra por categoría. Normal hasta el 80 %, aviso del 80 al 100 %, superado a partir del 100 %. Tocar abre la pantalla de Presupuestos.
 - La recomendación más importante del momento (enlace a todas).
-- **Patrimonio** = saldo de las cuentas + otros saldos activos. Al tocarlo se despliegan el subtotal y la lista de cuentas (tocar una abre sus movimientos) y el subtotal y la lista de otros saldos, con cuándo se actualizó cada uno.
+- **Patrimonio** = saldo de las cuentas + otros saldos activos. Al tocarlo se despliegan el subtotal y la lista de cuentas (tocar una abre sus movimientos) y el subtotal y la lista de otros saldos, con cuándo se actualizó cada uno. Con varias economías, al final, **Todas tus economías**: el patrimonio de cada una y la suma.
 - Últimos 5 movimientos.
 
 **Nuevo movimiento** (hoja que sube desde abajo; es la pantalla más importante de la app):
@@ -350,19 +392,20 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 2. **Frecuentes**: fila de hasta 6 chips con mis gastos repetidos (mismo concepto y categoría al menos 3 veces en 90 días), con su importe habitual ("☕ Café 1,50 €"). Un toque rellena todo; solo queda guardar.
 3. Importe grande con el teclado numérico abierto nada más entrar; acepta coma y punto.
 4. Categorías como chips con emoji, las más usadas en los últimos 90 días primero. El último chip es **+ Nueva**: abre un mini formulario en la misma hoja (nombre, emoji opcional; el color se asigna solo) y, al guardarla, queda creada y seleccionada sin salir del formulario.
-5. Una línea compacta con fecha (Hoy), cuenta (la última usada) y concepto, más el mes para el que cuenta en los ingresos; cada elemento se toca para cambiarlo. El concepto se autocompleta con los anteriores y, al elegir uno, propone su categoría. En traspasos, cuenta de origen y de destino en lugar de categoría.
+5. Una línea compacta con fecha (Hoy), cuenta (la última usada) y concepto, más el mes para el que cuenta en los ingresos; cada elemento se toca para cambiarlo. El concepto se autocompleta con los anteriores y, al elegir uno, propone su categoría. En traspasos, cuenta de origen y de destino en lugar de categoría. Con varias economías, las cuentas salen agrupadas por economía: si el destino (o el origen) es de otra, es un **traspaso entre economías** y se piden la categoría de gasto en la de origen y la de ingreso en la de destino. Una de las dos cuentas tiene que ser de la economía activa.
 6. **Descripción** (opcional): texto libre aparte del concepto ("cumple de Javi con los del curro"). Se ve en las listas debajo del concepto y se busca junto a él.
 7. Interruptor **Es fijo** (sección 7).
 8. Botón **Guardar gasto** / **Guardar ingreso** / **Guardar devolución** / **Guardar traspaso**. Al guardar, la hoja se cierra y aparece el aviso descrito en la sección 6.
-- Editar abre la misma hoja con los datos y los botones **Duplicar** (copia con fecha de hoy) y **Eliminar** (con confirmación).
+- Editar abre la misma hoja con los datos y los botones **Duplicar** (copia con fecha de hoy) y **Eliminar** (con confirmación). Un traspaso entre economías se edita y se elimina entero (las dos mitades) desde cualquiera de las dos, y no se duplica.
 
-**Movimientos.** Lista del mes agrupada por día, con total diario. Los pagos de fijos llevan la etiqueta "Fijo". Arriba, la sección **Grupos**: una fila plegada por grupo con entradas ese mes (nombre, nº de entradas, total) que al tocarla despliega sus entradas ("mar 14 · 09:35", descripción, importe). Las entradas de grupos no salen en la lista diaria ni en su total. Los filtros se aplican también a ellas. Filtros por cuenta, categoría, tipo y fijo/variable, y búsqueda en conceptos y descripciones. Deslizar a la izquierda para eliminar; tocar para editar.
+**Movimientos.** Lista del mes agrupada por día, con total diario. Los pagos de fijos llevan la etiqueta "Fijo"; las mitades de un traspaso entre economías, "Traspaso entre economías". Arriba, la sección **Grupos**: una fila plegada por grupo con entradas ese mes (nombre, nº de entradas, total) que al tocarla despliega sus entradas ("mar 14 · 09:35", descripción, importe). Las entradas de grupos no salen en la lista diaria ni en su total. Los filtros se aplican también a ellas. Filtros por cuenta, categoría, tipo y fijo/variable, y búsqueda en conceptos y descripciones. Deslizar a la izquierda para eliminar; tocar para editar.
 
 **Presupuestos.** Selector de mes. Presupuesto total y una fila por categoría de gasto. Si el importe viene heredado se indica ("igual que en septiembre"). Al cambiar un importe, se pregunta **Solo este mes** o **Este mes y los siguientes** (sección 6). Botón **Sugerir a partir de mi media**, que propone importes con la media de 3 meses redondeada a 10 €. Se llega desde Inicio y desde Ajustes.
 
 **Estadísticas.** Ver sección 10. Incluye el acceso a todas las recomendaciones y a las revisiones mensuales pasadas.
 
 **Ajustes.**
+- Arriba, **Economías**: en cuál estoy y cuántas tengo. Lista con **Entrar** en otra, crear (y entrar en ella con su asistente), cambiar nombre y color, y borrar (escribiendo su nombre; no se puede borrar la única). El resto de Ajustes son de la economía activa ("Ajustes de Casa").
 - Presupuestos (pantalla anterior).
 - Objetivo de ahorro.
 - Fijos: lista ordenada por coste, con descripción, periodicidad, día del cargo y próximo mes en que tocan; arriba, el total de fijos al mes y al año ("Fijos: 740 € al mes, 8.880 € al año"). Debajo, los cargos puntuales. Crear, editar, pausar y eliminar.
@@ -374,11 +417,11 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 - Seguridad: activar o desactivar la verificación en dos pasos (sección 4).
 - Acerca de: versión, commit, fecha de compilación, base de datos en uso y usuario.
 - Cerrar sesión.
-- **Zona de pruebas** (temporal): **Borrar todo**, que borra todos los datos del usuario tras escribir BORRAR y vuelve al asistente de primera vez.
+- **Zona de pruebas** (temporal): **Borrar todo**, que borra todas las economías del usuario con sus datos tras escribir BORRAR y vuelve a la primera economía.
 
 ## 9. Reglas de negocio
 
-- Los traspasos no cuentan como ingreso ni gasto; solo mueven saldo entre cuentas.
+- Los traspasos no cuentan como ingreso ni gasto; solo mueven saldo entre cuentas. Excepción: un traspaso entre economías es un gasto en la de origen y un ingreso en la de destino.
 - Las devoluciones suman saldo a su cuenta y restan del gasto de su categoría; no cuentan como ingreso.
 - Los otros saldos no cuentan en el control del mes ni en las estadísticas de gasto; solo en el patrimonio.
 - Los frecuentes y el autocompletado de conceptos ignoran las entradas de grupos.
@@ -521,3 +564,6 @@ Nota: el plan gratuito de Supabase pausa los proyectos con poca actividad durant
 - Archivar una cuenta o un otro saldo lo deja a 0, para que el patrimonio cuadre siempre con el dinero que de verdad se tiene.
 - La verificación en dos pasos es opcional; si está activada, la exige el servidor, no solo la app. Si se pierde la app autenticadora, el factor se borra desde el panel de Supabase.
 - "Borrar todo" en Ajustes es temporal: se quitará cuando haya una versión validada.
+- Todo pertenece a una **economía**; un usuario puede tener varias y cambiar de una a otra. Cada una tiene sus propias categorías, presupuestos y ajustes. De momento solo entra su propietario, pero la base de datos está preparada para compartirlas.
+- Un traspaso entre economías es un gasto en la de origen y un ingreso en la de destino (dos movimientos enlazados), y puede ser un fijo.
+- El patrimonio total de todas las economías se ve en Inicio (solo el valor actual; la evolución del patrimonio en Estadísticas es de la economía activa).

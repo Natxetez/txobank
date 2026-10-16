@@ -1,7 +1,16 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useHistorialSaldos, useOtrosSaldos } from '../data/consultas'
+import { useQuery } from '@tanstack/react-query'
+import { useEconomia } from '../data/EconomiaContext'
+import {
+  opcHistorialDeTodas,
+  opcOtrosSaldosDeTodas,
+  opcSaldosDeTodas,
+  useHistorialSaldos,
+  useOtrosSaldos,
+} from '../data/consultas'
 import { useCuentas, useSaldos } from '../data/hooks'
+import { patrimonioPorEconomia } from '../lib/economias'
 import { haceCuanto, saldosActuales } from '../lib/patrimonio'
 import { useFmt } from './Discreto'
 import { Icono, IconoCategoria } from './Icono'
@@ -82,8 +91,43 @@ export function BloquePatrimonio() {
               </Link>
             </li>
           </ul>
+
+          <PatrimonioTotal />
         </>
       )}
     </div>
+  )
+}
+
+/** Con varias economías: el patrimonio de cada una y la suma de todas. */
+function PatrimonioTotal() {
+  const fmt = useFmt()
+  const { economias, activa } = useEconomia()
+  const varias = economias.length > 1
+  const saldos = useQuery({ ...opcSaldosDeTodas(), enabled: varias }).data
+  const otros = useQuery({ ...opcOtrosSaldosDeTodas(), enabled: varias }).data
+  const historial = useQuery({ ...opcHistorialDeTodas(), enabled: varias }).data
+  if (!varias || !saldos || !otros || !historial) return null
+
+  const total = patrimonioPorEconomia(economias, saldos, otros, historial)
+  return (
+    <>
+      <div className="patrimonio-sub">
+        <span>Todas tus economías</span>
+        <span className="cifra">{fmt(total.total)}</span>
+      </div>
+      <ul className="lista">
+        {total.economias.map(({ economia, total: suyo }) => (
+          <li key={economia.id} className="fila">
+            <span className="punto" style={{ background: economia.color }} aria-hidden="true" />
+            <span className="fila-texto">
+              {economia.nombre}
+              {economia.id === activa.id && <span className="secundario pequeno">Esta economía</span>}
+            </span>
+            <span className={suyo < 0 ? 'cifra negativo-saldo' : 'cifra'}>{fmt(suyo)}</span>
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }

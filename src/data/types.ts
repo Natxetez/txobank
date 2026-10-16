@@ -14,6 +14,21 @@ export type Hora = string
 /** Fecha y hora ISO 8601 con zona (`2026-10-15T09:30:00.000Z`). */
 export type FechaHora = string
 
+/**
+ * Economía ("Personal", "Casa"): agrupa todo lo demás. Cada una tiene sus propias cuentas, categorías,
+ * movimientos, fijos, presupuestos, grupos, otros saldos y ajustes.
+ */
+export interface Economia {
+  id: string
+  nombre: string
+  color: string
+  orden: number
+  /** El usuario de la sesión es su propietario (y no solo miembro). */
+  propia: boolean
+}
+
+export type NuevaEconomia = Pick<Economia, 'nombre' | 'color' | 'orden'>
+
 export interface Ajustes {
   ahorroTipo: 'importe' | 'porcentaje' | null
   ahorroValor: number | null
@@ -65,7 +80,37 @@ export interface Movimiento {
   grupoId: string | null
   /** Hora del movimiento, si se conoce. */
   hora: Hora | null
+  /**
+   * Mitad de un traspaso entre economías: el gasto en la de origen o el ingreso en la de destino.
+   * Las dos mitades comparten este id y se crean, editan y borran juntas.
+   */
+  traspasoId: string | null
 }
+
+/** Una mitad de un traspaso entre economías. */
+export interface LadoTraspaso {
+  economiaId: string
+  cuentaId: string
+  /** De gasto en el origen, de ingreso en el destino. */
+  categoriaId: string
+}
+
+/** Traspaso entre economías: cuenta como gasto en la de origen y como ingreso en la de destino. */
+export interface TraspasoEconomias {
+  importe: number
+  fecha: Fecha
+  hora: Hora | null
+  nota: string
+  descripcion: string
+  origen: LadoTraspaso
+  destino: LadoTraspaso
+  /** Pago de un fijo (traspaso a otra economía): va en la mitad de origen. */
+  fijoId: string | null
+  fijoMes: Mes | null
+}
+
+/** Cuenta, categoría, saldo… junto con la economía a la que pertenece (para ver varias a la vez). */
+export type DeEconomia<T> = T & { economiaId: string }
 
 /**
  * Grupo de gastos ("Cafés y pintxos"): reúne gastos repetidos con una categoría fija.
@@ -107,8 +152,14 @@ export interface Fijo {
   tipo: 'gasto' | 'ingreso' | 'traspaso'
   importe: number
   cuentaId: string
+  /**
+   * Traspaso: cuenta de destino. Gasto con cuenta de destino: traspaso a otra economía (aquí es un gasto y
+   * allí entra como ingreso en esa cuenta, con `categoriaDestinoId`).
+   */
   cuentaDestinoId: string | null
   categoriaId: string | null
+  /** Solo en traspasos a otra economía: categoría de ingreso en la de destino. */
+  categoriaDestinoId: string | null
   diaMes: number
   cadaMeses: number
   desde: Mes
@@ -201,6 +252,14 @@ export interface MovimientosApi {
   listarPagosFijos(desde: Mes, hasta: Mes): Promise<Movimiento[]>
   /** Cambia la categoría y/o el concepto de todas las entradas de un grupo (al editar el grupo). */
   actualizarEntradasGrupo(grupoId: string, cambios: { categoriaId?: string; nota?: string }): Promise<void>
+  /** Crea las dos mitades de un traspaso entre economías; devuelve la de la economía activa. */
+  crearTraspasoEconomias(traspaso: TraspasoEconomias): Promise<Movimiento>
+  /** Las dos mitades de un traspaso entre economías, o null si falta alguna. */
+  obtenerTraspasoEconomias(traspasoId: string): Promise<TraspasoEconomias | null>
+  /** Cambia las dos mitades. Las economías de origen y destino no cambian. */
+  actualizarTraspasoEconomias(traspasoId: string, traspaso: TraspasoEconomias): Promise<void>
+  /** Borra las dos mitades. */
+  borrarTraspasoEconomias(traspasoId: string): Promise<void>
 }
 
 export type NuevoFijo = Omit<Fijo, 'id'>
@@ -269,9 +328,30 @@ export interface OtrosSaldosApi {
   borrarActualizacion(id: string): Promise<void>
 }
 
+/**
+ * Economías. Todas las demás APIs trabajan sobre la economía activa (`activar`); las consultas
+ * "de todas" sirven para los traspasos entre economías y el patrimonio total.
+ */
+export interface EconomiasApi {
+  /** Las economías a las que tiene acceso el usuario, por orden. */
+  listar(): Promise<Economia[]>
+  crear(economia: NuevaEconomia): Promise<Economia>
+  actualizar(id: string, cambios: Partial<NuevaEconomia>): Promise<Economia>
+  /** Borra la economía con todos sus datos. */
+  borrar(id: string): Promise<void>
+  /** Cambia la economía sobre la que trabajan el resto de APIs. */
+  activar(id: string | null): void
+  activa(): string | null
+  cuentasDeTodas(): Promise<DeEconomia<Cuenta>[]>
+  categoriasDeTodas(): Promise<DeEconomia<Categoria>[]>
+  saldosDeTodas(): Promise<DeEconomia<Saldo>[]>
+  otrosSaldosDeTodas(): Promise<DeEconomia<OtroSaldo>[]>
+  historialDeTodas(): Promise<ActualizacionSaldo[]>
+}
+
 /** Operaciones de mantenimiento, temporales mientras la app está en pruebas. */
 export interface MantenimientoApi {
-  /** Borra todos los datos del usuario (no el usuario). Después la app vuelve al asistente de primera vez. */
+  /** Borra todas las economías del usuario con sus datos (no el usuario). Después la app empieza de cero. */
   borrarTodo(): Promise<void>
 }
 
@@ -294,10 +374,12 @@ export interface SesionApi {
 
 /**
  * Único punto de acceso a datos para las pantallas.
- * Cubre sesión, ajustes, cuentas, categorías, movimientos, fijos, presupuestos, saldos, grupos y otros saldos.
+ * Cubre sesión, economías y, dentro de la economía activa, ajustes, cuentas, categorías, movimientos, fijos,
+ * presupuestos, saldos, grupos y otros saldos.
  */
 export interface DataSource {
   sesion: SesionApi
+  economias: EconomiasApi
   ajustes: AjustesApi
   cuentas: CuentasApi
   categorias: CategoriasApi

@@ -2,12 +2,15 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { mensajeError, useAccionesMovimiento, useCuentas } from '../data/hooks'
 import type { Mes } from '../data/types'
+import { useEconomia } from '../data/EconomiaContext'
 import { aTextoEditable, parseImporte } from '../lib/dinero'
+import { esTraspasoAOtraEconomia, traspasoDePago, validarTraspasoEconomias } from '../lib/economias'
 import { movimientoDePago } from '../lib/fijos'
 import type { FijoDelMes } from '../lib/fijos'
 import { hoyISO, nombreMes } from '../lib/meses'
 import { validarMovimiento } from '../lib/movimientos'
 import { Hoja } from './Hoja'
+import { useCuentasConEconomia } from './OpcionesCuentas'
 import { useAvisoGuardado } from './useAvisoGuardado'
 
 const VERBO = { gasto: 'pagado', ingreso: 'cobrado', traspaso: 'hecho' } as const
@@ -24,6 +27,8 @@ export function HojaPagarFijo({ item, mes, onCerrar }: Props) {
   const cuentas = useCuentas().data ?? []
   const acciones = useAccionesMovimiento()
   const avisar = useAvisoGuardado()
+  const { activa } = useEconomia()
+  const { economiaDe } = useCuentasConEconomia()
 
   const [importe, setImporte] = useState(aTextoEditable(fijo.importe))
   const [fecha, setFecha] = useState(hoyISO())
@@ -36,12 +41,17 @@ export function HojaPagarFijo({ item, mes, onCerrar }: Props) {
     setError(null)
     const centimos = parseImporte(importe)
     if (centimos === null) return setError('Escribe un importe válido.')
-    const nuevo = movimientoDePago(fijo, mes, { fecha, importe: centimos, cuentaId })
-    const fallo = validarMovimiento(nuevo)
+    const datos = { fecha, importe: centimos, cuentaId }
+    // Traspaso a otra economía: el gasto aquí y el ingreso en la cuenta de destino de la otra.
+    const traspaso = esTraspasoAOtraEconomia(fijo)
+      ? traspasoDePago(fijo, mes, datos, activa.id, economiaDe(fijo.cuentaDestinoId ?? ''))
+      : null
+    const nuevo = movimientoDePago(fijo, mes, datos)
+    const fallo = traspaso ? validarTraspasoEconomias(traspaso) : validarMovimiento(nuevo)
     if (fallo) return setError(fallo)
     setEnviando(true)
     try {
-      const creado = await acciones.crear(nuevo)
+      const creado = traspaso ? await acciones.crearTraspaso(traspaso) : await acciones.crear(nuevo)
       void avisar(creado)
       onCerrar()
     } catch (err) {

@@ -18,6 +18,7 @@ import { hoyISO, mesActual, mesDeFecha, nombreMes, sumarMeses } from '../lib/mes
 import { mediaMensual } from '../lib/presupuestos'
 import { mesDeCuenta } from '../lib/control'
 import { useHojaMovimiento } from '../components/ContextoMovimiento'
+import { SelectorEconomia } from '../components/SelectorEconomia'
 
 const TEXTO_ESTADO = { bien: 'Vas bien', ajustado: 'Vas ajustado', pasado: 'Te pasas' } as const
 
@@ -109,6 +110,7 @@ export function Inicio() {
 
   return (
     <section className="pantalla ancho inicio">
+      <SelectorEconomia />
       <SelectorMes mes={mes} onCambiar={setMes}>
         <BotonDiscreto />
       </SelectorMes>

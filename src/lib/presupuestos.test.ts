@@ -126,6 +126,7 @@ describe('sugerencias desde la media', () => {
     fijoMes: null,
     mesImputado: null,
     grupoId: null,
+    traspasoId: null,
     hora: null,
   })
 
