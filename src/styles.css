@@ -25,6 +25,11 @@
   --hero-pasado: linear-gradient(140deg, #f25555 0%, #cf2b2b 55%, #9e1c1c 100%);
   --hero-neutro: linear-gradient(140deg, #2c4038 0%, #1b2b24 55%, #12201a 100%);
 
+  /* Barras de ingresos y gastos: paleta validada (daltonismo y contraste) en claro y en oscuro. */
+  --ig-ingreso: #0ca678;
+  --ig-fijo: #4263eb;
+  --ig-variable: #e8890c;
+
   --sombra: 0 1px 2px rgba(18, 32, 26, 0.04), 0 4px 16px rgba(18, 32, 26, 0.06);
   --sombra-alta: 0 10px 30px rgba(18, 32, 26, 0.18);
   --radio: 18px;
@@ -34,9 +39,12 @@
   --fuente-cifras: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
   color-scheme: light dark;
 }
+/* Tema elegido a mano en Ajustes → Apariencia (sin atributo: el del sistema). */
+:root[data-tema='claro'] { color-scheme: light; }
+:root[data-tema='oscuro'] { color-scheme: dark; }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-tema='claro']) {
     --fondo: #0c1411;
     --superficie: #15201b;
     --superficie-2: #1d2a24;
@@ -60,9 +68,44 @@
     --hero-pasado: linear-gradient(140deg, #d94444 0%, #ab2323 55%, #721616 100%);
     --hero-neutro: linear-gradient(140deg, #26362f 0%, #1a2722 55%, #121c18 100%);
 
+    --ig-ingreso: #20a07a;
+    --ig-fijo: #6782ef;
+    --ig-variable: #b97c1a;
+
     --sombra: 0 1px 2px rgba(0, 0, 0, 0.3);
     --sombra-alta: 0 10px 30px rgba(0, 0, 0, 0.5);
   }
+}
+:root[data-tema='oscuro'] {
+  --fondo: #0c1411;
+  --superficie: #15201b;
+  --superficie-2: #1d2a24;
+  --texto: #e6eee9;
+  --secundario: #93a39a;
+  --borde: rgba(230, 238, 233, 0.1);
+
+  --principal: #38d9a9;
+  --principal-texto: #4fe0b4;
+  --principal-suave: rgba(56, 217, 169, 0.16);
+  --acento: #ffc266;
+  --acento-texto: #ffc266;
+  --aviso: #ffa94d;
+  --peligro: #ff6b6b;
+
+  --boton: #38d9a9;
+  --sobre-boton: #06120d;
+
+  --hero-bien: linear-gradient(140deg, #13a374 0%, #0b7553 55%, #064a35 100%);
+  --hero-ajustado: linear-gradient(140deg, #d98a10 0%, #b36200 55%, #7d4300 100%);
+  --hero-pasado: linear-gradient(140deg, #d94444 0%, #ab2323 55%, #721616 100%);
+  --hero-neutro: linear-gradient(140deg, #26362f 0%, #1a2722 55%, #121c18 100%);
+
+  --ig-ingreso: #20a07a;
+  --ig-fijo: #6782ef;
+  --ig-variable: #b97c1a;
+
+  --sombra: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --sombra-alta: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 /* ---------------------------------------------------------------- Base */
@@ -208,8 +251,10 @@ select {
 .segmentado button.activa, .pestanas button.activa { background: var(--superficie); color: var(--texto); box-shadow: var(--sombra); }
 @media (prefers-color-scheme: dark) {
   /* En oscuro la superficie casi no se distingue de la superficie secundaria. */
-  .segmentado button.activa, .pestanas button.activa { background: color-mix(in srgb, var(--texto) 16%, var(--superficie-2)); }
+  :root:not([data-tema='claro']) .segmentado button.activa, :root:not([data-tema='claro']) .pestanas button.activa { background: color-mix(in srgb, var(--texto) 16%, var(--superficie-2)); }
 }
+/* En oscuro la superficie casi no se distingue de la superficie secundaria. */
+:root[data-tema='oscuro'] .segmentado button.activa, :root[data-tema='oscuro'] .pestanas button.activa { background: color-mix(in srgb, var(--texto) 16%, var(--superficie-2)); }
 
 /* Casilla como interruptor de iOS */
 .casilla { display: flex; align-items: center; gap: 12px; font-size: 0.95rem; min-height: 44px; }
@@ -453,9 +498,12 @@ button.fila:active, a.fila:active { background: var(--superficie-2); }
 }
 @media (prefers-color-scheme: dark) {
   /* En oscuro la hoja (color de fondo) apenas se distinguía de la pantalla de detrás. */
-  .hoja-fondo { background: rgba(0, 0, 0, 0.62); }
-  .hoja { box-shadow: 0 -1px 0 var(--borde), var(--sombra-alta); }
+  :root:not([data-tema='claro']) .hoja-fondo { background: rgba(0, 0, 0, 0.62); }
+  :root:not([data-tema='claro']) .hoja { box-shadow: 0 -1px 0 var(--borde), var(--sombra-alta); }
 }
+/* En oscuro la hoja (color de fondo) apenas se distinguía de la pantalla de detrás. */
+:root[data-tema='oscuro'] .hoja-fondo { background: rgba(0, 0, 0, 0.62); }
+:root[data-tema='oscuro'] .hoja { box-shadow: 0 -1px 0 var(--borde), var(--sombra-alta); }
 .hoja::before { content: ''; display: block; width: 40px; height: 5px; margin: 0 auto 6px; border-radius: 3px; background: var(--borde); }
 .hoja-cab { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .hoja-cab h2 { margin: 0; font-size: 1.2rem; font-weight: 800; }
@@ -900,3 +948,35 @@ button.volver { border: 0; padding: 0 6px 0 0; background: transparent; font: in
 .ajustes-de { margin: 6px 0 -4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.75rem; }
 .entre-economias { display: flex; flex-direction: column; gap: 10px; width: 100%; padding: 12px; border-radius: var(--radio-s); background: var(--principal-suave); }
 .entre-economias .ayuda { margin: 0; color: var(--principal-texto); }
+
+/* ---------------------------------------------------------------- Ingresos y gastos (Inicio) */
+.ingresos-gastos { width: 100%; display: flex; flex-direction: column; gap: 14px; padding: 18px 16px 16px; border-radius: var(--radio); background: var(--superficie); box-shadow: var(--sombra); }
+.ingresos-gastos.destacado { padding: 22px 18px 18px; border-radius: 26px; box-shadow: var(--sombra-alta); }
+.ingresos-gastos p { margin: 0; }
+.ig-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ig-cab h2 { margin: 0; font-size: 1.1rem; font-weight: 750; }
+.ig-ahorro { font: 700 1rem var(--fuente-cifras); font-variant-numeric: tabular-nums; }
+.ingresos-gastos.destacado .ig-ahorro { font-size: 1.35rem; }
+.ig-ahorro.positivo { color: var(--principal-texto); }
+.ig-fila { display: flex; flex-direction: column; gap: 6px; }
+.ig-etiqueta { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; }
+.ig-etiqueta .cifra { font-variant-numeric: tabular-nums; }
+.ig-barra { display: flex; gap: 2px; height: 14px; border-radius: 4px; background: var(--superficie-2); overflow: hidden; }
+.ig-tramo { flex: none; height: 100%; border-radius: 4px; transition: width 0.5s ease-out; }
+.ig-tramo.ingreso { background: var(--ig-ingreso); }
+.ig-tramo.fijo { background: var(--ig-fijo); }
+.ig-tramo.variable { background: var(--ig-variable); }
+/* Lo que falta por cobrar o pagar de los fijos: rayado del mismo color. */
+.ig-tramo.pendiente, .ig-punto.pendiente { background: repeating-linear-gradient(135deg, var(--c) 0 3px, transparent 3px 7px); box-shadow: inset 0 0 0 1.5px var(--c); }
+.ig-tramo.ingreso.pendiente { --c: var(--ig-ingreso); }
+.ig-tramo.fijo.pendiente, .ig-punto.fijo.pendiente { --c: var(--ig-fijo); }
+.ig-leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.78rem; color: var(--secundario); }
+.ig-leyenda > span { display: inline-flex; align-items: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ig-punto { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 3px; }
+.ig-punto.fijo { background: var(--ig-fijo); }
+.ig-punto.variable { background: var(--ig-variable); }
+.ig-nota { font-size: 0.82rem; color: var(--secundario); }
+.ig-nota.ok { color: var(--principal-texto); }
+.ig-punto.fijo.pendiente { background: repeating-linear-gradient(135deg, var(--ig-fijo) 0 2px, transparent 2px 4px); }
+.apariencia { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.apariencia .segmentado { width: 100%; }

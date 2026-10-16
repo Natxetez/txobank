@@ -19,27 +19,17 @@ import { mediaMensual } from '../lib/presupuestos'
 import { mesDeCuenta } from '../lib/control'
 import { useHojaMovimiento } from '../components/ContextoMovimiento'
 import { SelectorEconomia } from '../components/SelectorEconomia'
+import { IngresosGastos } from '../components/IngresosGastos'
 
 const TEXTO_ESTADO = { bien: 'Vas bien', ajustado: 'Vas ajustado', pasado: 'Te pasas' } as const
 
-function Protagonista({ control, mediaTres }: { control: Control; mediaTres: number | null }) {
+/** "Te quedan": solo cuando el mes tiene presupuesto total (sin él, Inicio muestra ingresos frente a gastos). */
+function Protagonista({ control }: { control: Control }) {
   const fmt = useFmt()
   const { limite, disponible, disponibleSinPendientes, estado, disponiblePorDia, diasQueQuedan, resumen, fijosGastoPendiente } =
     control
 
-  if (!limite || disponible === null || disponibleSinPendientes === null || estado === null) {
-    return (
-      <div className="protagonista neutro">
-        <p className="etiqueta-grande">Gasto de este mes</p>
-        <p className="cifra-enorme">{fmt(resumen.gastoNeto)}</p>
-        <p className="secundario">
-          {mediaTres !== null
-            ? `Tu media de los 3 meses anteriores es ${fmt(Math.round(mediaTres))}.`
-            : 'Sin presupuesto ni ingresos, no hay límite. Ponle un presupuesto total al mes en Ajustes.'}
-        </p>
-      </div>
-    )
-  }
+  if (!limite || disponible === null || disponibleSinPendientes === null || estado === null) return null
 
   // La cifra grande no cuenta los fijos pendientes (no cuentan hasta que se cobran); el estado y el
   // "al día" sí, para no llevarse sorpresas.
@@ -124,7 +114,14 @@ export function Inicio() {
 
       {datos && (
         <>
-          <Protagonista control={datos.control} mediaTres={mediaTres} />
+          {datos.control.limite ? (
+            <>
+              <Protagonista control={datos.control} />
+              <IngresosGastos control={datos.control} />
+            </>
+          ) : (
+            <IngresosGastos control={datos.control} sinPresupuesto mediaTres={mediaTres} />
+          )}
 
           {esMesActual && <ProximosCargos />}
 

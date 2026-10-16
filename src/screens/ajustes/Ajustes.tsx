@@ -11,6 +11,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Hoja } from '../../components/Hoja'
 import { useEconomia } from '../../data/EconomiaContext'
 import { VERSION } from '../../version'
+import { guardarTema, leerTema } from '../../tema'
+import type { Tema } from '../../tema'
 
 const ENLACES: { a: string; t: string; icono: NombreIcono; color: string }[] = [
   { a: '/presupuestos', t: 'Presupuestos', icono: 'presupuesto', color: '#12B886' },
@@ -89,6 +91,7 @@ export function Ajustes() {
           {error}
         </p>
       )}
+      <Apariencia />
       <nav className="lista" aria-label="Información">
         <Link to="/ajustes/acerca-de" className="fila">
           <IconoCategoria color="#5E6E66">
@@ -114,6 +117,42 @@ export function Ajustes() {
       </ul>
       <ZonaPruebas />
     </section>
+  )
+}
+
+const TEMAS: { valor: Tema; texto: string }[] = [
+  { valor: 'sistema', texto: 'Automático' },
+  { valor: 'claro', texto: 'Claro' },
+  { valor: 'oscuro', texto: 'Oscuro' },
+]
+
+/** Tema de la app en este dispositivo: el del sistema, o claro u oscuro siempre. */
+function Apariencia() {
+  const [tema, setTema] = useState<Tema>(leerTema)
+  return (
+    <div className="apariencia">
+      <p className="secundario pequeno ajustes-de">Apariencia</p>
+      <div className="segmentado" role="radiogroup" aria-label="Tema">
+        {TEMAS.map((t) => (
+          <button
+            key={t.valor}
+            type="button"
+            role="radio"
+            aria-checked={tema === t.valor}
+            className={tema === t.valor ? 'activa' : ''}
+            onClick={() => {
+              guardarTema(t.valor)
+              setTema(t.valor)
+            }}
+          >
+            {t.texto}
+          </button>
+        ))}
+      </div>
+      <p className="secundario pequeno">
+        {tema === 'sistema' ? 'Sigue el modo claro u oscuro del iPhone.' : 'Se guarda en este dispositivo.'}
+      </p>
+    </div>
   )
 }
 

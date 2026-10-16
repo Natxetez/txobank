@@ -115,8 +115,8 @@ export function Asistente({ onTerminar }: { onTerminar: () => void }) {
         <>
           <h1>Tu mes</h1>
           <p className="secundario">
-            Ambos datos son opcionales y se pueden cambiar en Ajustes. Sin presupuesto, el límite del mes saldrá de tus
-            ingresos.
+            Ambos datos son opcionales y se pueden cambiar en Ajustes. Sin presupuesto, Inicio te
+            enseñará tus ingresos frente a tus gastos.
           </p>
           <form onSubmit={enviarMes} className="formulario">
             <label className="campo">

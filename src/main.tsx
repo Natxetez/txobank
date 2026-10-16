@@ -6,7 +6,11 @@ import { DiscretoProvider } from './components/Discreto'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SesionProvider } from './data/SesionContext'
 import { App } from './App'
+import { aplicarTema, leerTema } from './tema'
 import './styles.css'
+
+// Antes de pintar nada, para que no se vea un destello del otro tema.
+aplicarTema(leerTema())
 
 const queryClient = new QueryClient({
   defaultOptions: {

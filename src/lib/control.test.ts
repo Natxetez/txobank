@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { Ajustes, Fijo, Movimiento, Presupuesto } from '../data/types'
 import { avisoTrasGasto } from './avisos'
-import { calcularControl, limiteMes, mesDeCuenta, objetivoAhorro, progresoPresupuestos, resumenMes } from './control'
+import {
+  calcularControl,
+  ingresosFrenteAGastos,
+  limiteMes,
+  mesDeCuenta,
+  objetivoAhorro,
+  progresoPresupuestos,
+  resumenMes,
+} from './control'
 import type { EntradaControl } from './control'
 
 let n = 0
@@ -124,15 +132,14 @@ describe('resumenMes', () => {
 
 describe('límite del mes: tres variantes', () => {
   it('con presupuesto total: es el presupuesto', () => {
-    expect(limiteMes(120000, 200000, 30000)).toEqual({ valor: 120000, origen: 'presupuesto' })
+    expect(limiteMes(120000)).toEqual({ valor: 120000 })
   })
 
   it('sin presupuesto: ingresos previstos menos objetivo de ahorro', () => {
-    expect(limiteMes(null, 200000, 30000)).toEqual({ valor: 170000, origen: 'ingresos' })
+    expect(limiteMes(null)).toBeNull()
   })
 
   it('sin presupuesto ni ingresos previstos: no hay límite', () => {
-    expect(limiteMes(null, 0, 30000)).toBeNull()
   })
 
   it('objetivo de ahorro en importe o en porcentaje de los ingresos', () => {
@@ -160,7 +167,7 @@ describe('calcularControl', () => {
         fijos: [fijo({ importe: 60000, diaMes: 28 })],
       }),
     )
-    expect(c.limite).toEqual({ valor: 120000, origen: 'presupuesto' })
+    expect(c.limite).toEqual({ valor: 120000 })
     expect(c.fijosGastoPendiente).toBe(60000)
     expect(c.disponible).toBe(30000)
     // La cifra grande de Inicio no cuenta los fijos pendientes hasta que se cobran.
@@ -194,7 +201,7 @@ describe('calcularControl', () => {
     expect(c.disponible).toBe(120000)
   })
 
-  it('sin presupuesto: ingresos (con imputados) + fijos de ingreso pendientes − ahorro', () => {
+  it('sin presupuesto no hay límite aunque haya ingresos: no se deduce de ellos', () => {
     const nomina = mov({ tipo: 'ingreso', importe: 100000, categoriaId: 'nomina', fecha: '2026-08-29', mesImputado: MES })
     const c = calcularControl(
       entrada({
@@ -204,8 +211,45 @@ describe('calcularControl', () => {
       }),
     )
     expect(c.ingresosPrevistos).toBe(150000)
-    expect(c.limite).toEqual({ valor: 120000, origen: 'ingresos' })
-    expect(c.disponible).toBe(120000)
+    expect(c.objetivoAhorro).toBe(30000)
+    expect(c.limite).toBeNull()
+    expect(c.disponible).toBeNull()
+    expect(c.estado).toBeNull()
+  })
+
+  it('ingresos frente a gastos: cobrado, por cobrar, fijo, variable, pendiente y ahorro', () => {
+    const nomina = mov({ tipo: 'ingreso', importe: 100000, categoriaId: 'nomina' })
+    const pago = mov({ importe: 61000, categoriaId: 'casa', fijoId: 'f1', fijoMes: MES })
+    const c = calcularControl(
+      entrada({
+        movimientos: [nomina, pago, mov({ importe: 9000 }), mov({ tipo: 'devolucion', importe: 1000 })],
+        pagos: [pago],
+        ajustes: { ahorroTipo: 'importe', ahorroValor: 30000 },
+        fijos: [
+          fijo({ importe: 60000 }),
+          fijo({ id: 'f2', importe: 5000, diaMes: 28 }),
+          fijo({ id: 'f3', tipo: 'ingreso', importe: 50000, categoriaId: 'nomina', diaMes: 28 }),
+        ],
+      }),
+    )
+    expect(ingresosFrenteAGastos(c)).toEqual({
+      ingresos: 100000,
+      ingresosPendientes: 50000,
+      gastoFijo: 61000,
+      gastoVariable: 8000,
+      gastosPendientes: 5000,
+      ahorro: 31000,
+      ahorroPrevisto: 76000,
+      objetivoAhorro: 30000,
+      escala: 150000,
+    })
+  })
+
+  it('ingresos frente a gastos: más devoluciones que gasto variable no dibuja en negativo', () => {
+    const c = calcularControl(entrada({ movimientos: [mov({ tipo: 'devolucion', importe: 2000 })] }))
+    const r = ingresosFrenteAGastos(c)
+    expect(r.gastoVariable).toBe(0)
+    expect(r.ahorro).toBe(2000)
   })
 
   it('días que quedan (incluido hoy) y disponible por día', () => {

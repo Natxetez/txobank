@@ -27,6 +27,7 @@
 - Estadísticas con gráficos, calendario de gasto y separación entre gasto fijo y variable (sección 10).
 - Recomendaciones automáticas basadas en mis datos (sección 11).
 - Modo discreto para ocultar importes.
+- Tema automático (el del sistema), claro u oscuro, a elegir en Ajustes.
 - Exportación a CSV.
 - Instalable como PWA desde GitHub Pages.
 
@@ -320,8 +321,10 @@ Es el corazón de la app. Toda la lógica va en `src/lib/` como funciones puras 
 
 **Límite del mes.**
 - Si hay presupuesto total vigente → límite = presupuesto total (incluye los gastos fijos).
-- Si no → límite = ingresos previstos − objetivo de ahorro, donde ingresos previstos = ingresos que cuentan para el mes + fijos de ingreso del mes aún pendientes.
-- Si no hay ni presupuesto total ni ingresos previstos, no hay límite: Inicio muestra lo gastado y la comparación con mi media.
+- Si no, **no hay límite**: no se deduce de los ingresos. Inicio muestra en su lugar **ingresos frente a gastos** (abajo), la media de gasto de los 3 meses anteriores y un enlace para poner presupuesto.
+- Ingresos previstos = ingresos que cuentan para el mes + fijos de ingreso del mes aún pendientes. Se usan para el objetivo de ahorro en porcentaje y en ingresos frente a gastos.
+
+**Ingresos frente a gastos.** Dos barras horizontales en la misma escala: **Ingresos** (cobrados en sólido y fijos de ingreso por cobrar rayados) y **Gastos** (fijos, variables netos de devoluciones y fijos de gasto por pagar rayados), con su importe. Arriba, lo que se ahorra en lo que va de mes ("Ahorras 450 €" o "Gastas 120 € más"); debajo, el ahorro previsto contando lo que falta de los fijos y el objetivo de ahorro, si lo hay. Sin presupuesto ocupa el sitio de la cifra protagonista; con presupuesto va justo debajo de ella. Colores propios validados para daltonismo en claro y en oscuro (ingresos menta, gasto fijo azul, variable ámbar).
 
 **Disponible.** Los fijos pendientes no cuentan en lo gastado hasta que se cobran, pero no se pierden de vista:
 - Disponible = límite − gasto neto del mes. Es la cifra grande de Inicio ("Te quedan 800 €").
@@ -330,7 +333,7 @@ Es el corazón de la app. Toda la lógica va en `src/lib/` como funciones puras 
 - Ritmo previsto = (límite − fijos de gasto del mes) / días del mes.
 - Estado (se calcula con la cifra prudente, la de tras los pendientes): **bien** si el disponible por día es igual o mayor que el ritmo previsto; **ajustado** si es menor pero positivo; **pasado** si el disponible tras los pendientes es negativo ("Con los cargos pendientes te pasarás 45 €"; si ya es negativo sin ellos, "Te has pasado 45 €").
 
-**Objetivo de ahorro.** Importe fijo al mes o porcentaje de los ingresos. Se descuenta del límite cuando no hay presupuesto total, y se compara en estadísticas y en la revisión mensual.
+**Objetivo de ahorro.** Importe fijo al mes o porcentaje de los ingresos. Se compara con el ahorro en ingresos frente a gastos, en estadísticas y en la revisión mensual. No cambia el límite.
 
 **Aviso al guardar.** El aviso que aparece tras guardar un gasto incluye el estado de su categoría si tiene presupuesto ("Comida: 172 € de 200 €") y lo destaca si con ese gasto se supera el 80 % o el 100 % de la categoría o del límite del mes. Mantiene el botón Deshacer.
 
@@ -375,7 +378,8 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 **Inicio.**
 - Arriba, la **economía activa** (punto de color y nombre). Al tocarla, una hoja para cambiar a otra, crear una nueva o ir a Ajustes → Economías.
 - Selector de mes (‹ septiembre ›).
-- Cifra protagonista: **disponible** ("Te quedan 412 €") con el disponible por día debajo ("27 € al día durante 15 días") y el color del estado. Debajo, una barra de gasto neto frente al límite, con la parte fija y la variable diferenciadas.
+- Cifra protagonista (solo con presupuesto total): **disponible** ("Te quedan 412 €") con el disponible por día debajo ("27 € al día durante 15 días") y el color del estado. Debajo, una barra de gasto neto frente al límite, con la parte fija y la variable diferenciadas.
+- **Ingresos frente a gastos** (sección 6): debajo de la cifra protagonista o, sin presupuesto, en su lugar.
 - Icono de ojo para el **modo discreto**: sustituye todos los importes de la app por "•••" hasta que se vuelve a tocar (recordado en el dispositivo).
 - Cifra protagonista sobre una tarjeta con el color del estado (menta, ámbar o rojo), con "Tras los cargos pendientes" debajo cuando los hay (sección 6).
 - **Próximos cargos** (en el mes actual): tarjetas deslizables con los fijos de los próximos 7 días y los que se esperaban ya (sección 7).
@@ -414,6 +418,7 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 - **Otros saldos**: total arriba y lista con su saldo y la fecha y hora de la última actualización. Crear (con saldo inicial, que queda como primera actualización), editar, archivar (con aviso: su saldo pasa a 0 € y queda apuntado en el historial) y eliminar (borra también su historial). Al tocar uno: actualizar su saldo (con fecha y hora editables, por defecto ahora; admite negativos) y ver el historial con la diferencia frente a la actualización anterior, pudiendo borrar una.
 - Categorías: pestañas Gasto / Ingreso. Crear, renombrar, emoji, color, reordenar y archivar. Una categoría con movimientos no se borra, se archiva.
 - Exportar CSV.
+- **Apariencia**: Automático (el del sistema), Claro u Oscuro. Se recuerda en el dispositivo.
 - Seguridad: activar o desactivar la verificación en dos pasos (sección 4).
 - Acerca de: versión, commit, fecha de compilación, base de datos en uso y usuario.
 - Cerrar sesión.
@@ -480,8 +485,8 @@ Objetivo: que dé gusto abrirla cada día, con aspecto de app nativa de iPhone y
 
 - **Tipografía**: la del sistema. Cifras con `ui-rounded` (SF Pro Rounded en iPhone) y cifras tabulares; texto con `system-ui`. Los importes grandes, empezando por el disponible de Inicio, son el elemento visual principal.
 - **Paleta clara**: fondo `#F3F7F5`, superficie `#FFFFFF`, superficie secundaria (campos, segmentados) `#E9F0EC`, texto `#12201A`, texto secundario `#5E6E66`, principal menta `#12B886` (menta legible para texto `#087F5B`), acento ámbar `#FFB547` (destacados y gasto variable), aviso `#F08C00`, peligro `#E03131`. Botón principal en tinta (`#12201A`, texto blanco).
-- **Paleta oscura** (según el sistema): fondo `#0C1411`, superficie `#15201B`, superficie secundaria `#1D2A24`, texto `#E6EEE9`, secundario `#93A39A`, principal `#38D9A9`, ámbar `#FFC266`. Botón principal en menta con texto oscuro.
-- **Cifra protagonista**: tarjeta con degradado según el estado (menta si va bien, ámbar si va ajustado, rojo si se pasa, tinta si no hay límite) y texto blanco.
+- **Paleta oscura** (según el sistema, o elegida en Ajustes → Apariencia, que pone `data-tema` en `<html>`): fondo `#0C1411`, superficie `#15201B`, superficie secundaria `#1D2A24`, texto `#E6EEE9`, secundario `#93A39A`, principal `#38D9A9`, ámbar `#FFC266`. Botón principal en menta con texto oscuro.
+- **Cifra protagonista**: tarjeta con degradado según el estado (menta si va bien, ámbar si va ajustado, rojo si se pasa) y texto blanco. Sin límite no hay cifra protagonista: la sustituye ingresos frente a gastos.
 - **Barra inferior** flotante y translúcida, con iconos de trazo (SVG en línea, sin librerías) y el botón **+** central con el degradado menta.
 - Tarjetas y listas con esquinas de 18 px y sombra suave; categorías con su emoji sobre un cuadrado redondeado de su color suavizado; interruptores estilo iOS.
 - **Estados del mes**: bien en verde principal, ajustado en aviso, pasado en peligro. Siempre acompañados de texto, no solo de color.
@@ -502,7 +507,7 @@ Funciones puras en `src/lib/` con tests de Vitest:
 - Meses: límites de mes natural, cambios de año e ingresos con `mes_imputado` (nómina adelantada y retrasada).
 - Presupuesto vigente de cada mes: herencia, "solo este mes" y "este mes y los siguientes", total y por categoría.
 - Fijos: qué fijos tocan cada mes según periodicidad, `desde`, `hasta` y pausa; cargos puntuales; fechas cambiadas para un mes; estados (pendiente, se esperaba ya, pagado, omitido); pagos adelantados y tardíos; coste mensual y anual; próximos cargos.
-- Control del mes: gasto neto con devoluciones, parte fija y variable, límite en sus tres variantes, disponible con y sin los fijos pendientes, disponible por día, ritmo previsto y estado.
+- Control del mes: gasto neto con devoluciones, parte fija y variable, límite (con y sin presupuesto), ingresos frente a gastos, disponible con y sin los fijos pendientes, disponible por día, ritmo previsto y estado.
 - Resúmenes de periodo (excluyendo traspasos) y variaciones frente al periodo anterior.
 - Detección de frecuentes y sugerencia de categoría por concepto.
 - Series de los gráficos, incluido el calendario y las rachas sin gasto.
@@ -555,6 +560,7 @@ Nota: el plan gratuito de Supabase pausa los proyectos con poca actividad durant
 - Cada movimiento y cada fijo tienen, además del concepto o el nombre, una descripción libre opcional.
 - El presupuesto, total y por categoría, puede ser distinto cada mes; un mes sin cambios hereda el del anterior.
 - El presupuesto total incluye los gastos fijos.
+- Sin presupuesto total no hay límite ni "Te quedan": no se deduce de los ingresos. Inicio enseña ingresos frente a gastos (también, debajo, cuando sí hay presupuesto).
 - El saldo de las cuentas solo cuenta movimientos hasta hoy.
 - La tarjeta de crédito funciona como cuenta con saldo negativo.
 - Una sola moneda: euro.

@@ -65,17 +65,14 @@ export function objetivoAhorro(ajustes: Ajustes, ingresosPrevistos: number): num
 
 export interface Limite {
   valor: number
-  origen: 'presupuesto' | 'ingresos'
 }
 
 /**
- * Límite del mes: el presupuesto total si lo hay (incluye los fijos); si no, ingresos previstos menos
- * objetivo de ahorro; si tampoco hay ingresos previstos, no hay límite.
+ * Límite del mes: el presupuesto total (incluye los fijos). Sin presupuesto no hay límite: no se deduce
+ * de los ingresos, e Inicio muestra en su lugar ingresos frente a gastos.
  */
-export function limiteMes(presupuestoTotal: number | null, ingresosPrevistos: number, objetivo: number): Limite | null {
-  if (presupuestoTotal !== null) return { valor: presupuestoTotal, origen: 'presupuesto' }
-  if (ingresosPrevistos > 0) return { valor: ingresosPrevistos - objetivo, origen: 'ingresos' }
-  return null
+export function limiteMes(presupuestoTotal: number | null): Limite | null {
+  return presupuestoTotal !== null ? { valor: presupuestoTotal } : null
 }
 
 export type EstadoMes = 'bien' | 'ajustado' | 'pasado'
@@ -128,7 +125,7 @@ export function calcularControl(e: EntradaControl): Control {
   const presupuestoTotal = presupuestoVigente(e.presupuestos, e.mes, null).importe
   const ingresosPrevistos = resumen.ingresos + previstoPendiente(fijosMes, 'ingreso')
   const objetivo = objetivoAhorro(e.ajustes, ingresosPrevistos)
-  const limite = limiteMes(presupuestoTotal, ingresosPrevistos, objetivo)
+  const limite = limiteMes(presupuestoTotal)
   const fijosGastoPendiente = previstoPendiente(fijosMes, 'gasto')
   const fijosGastoTotal = resumenFijos(fijosMes, 'gasto').importeTotal
 
@@ -169,6 +166,45 @@ export function calcularControl(e: EntradaControl): Control {
     disponiblePorDia,
     ritmoPrevisto,
     estado,
+  }
+}
+
+export interface IngresosGastos {
+  /** Ingresos que cuentan para el mes (con los imputados de otro mes). */
+  ingresos: number
+  /** Fijos de ingreso aún por cobrar. */
+  ingresosPendientes: number
+  gastoFijo: number
+  /** Gasto variable neto de devoluciones (nunca negativo, para dibujarlo). */
+  gastoVariable: number
+  /** Fijos de gasto aún por pagar. */
+  gastosPendientes: number
+  /** Ingresos menos gasto neto de lo que va de mes; negativo si se gasta más de lo que entra. */
+  ahorro: number
+  /** Lo mismo contando lo que falta por cobrar y por pagar de los fijos. */
+  ahorroPrevisto: number
+  objetivoAhorro: number
+  /** Mayor de los dos totales (con pendientes): la escala común de las dos barras. */
+  escala: number
+}
+
+/** Ingresos frente a gastos del mes, para las barras de Inicio. */
+export function ingresosFrenteAGastos(control: Control): IngresosGastos {
+  const { resumen } = control
+  const ingresosPendientes = control.ingresosPrevistos - resumen.ingresos
+  const gastoVariable = Math.max(0, resumen.gastoVariable)
+  const totalGastos = resumen.gastoFijo + gastoVariable + control.fijosGastoPendiente
+  const ahorro = resumen.ingresos - resumen.gastoNeto
+  return {
+    ingresos: resumen.ingresos,
+    ingresosPendientes,
+    gastoFijo: resumen.gastoFijo,
+    gastoVariable,
+    gastosPendientes: control.fijosGastoPendiente,
+    ahorro,
+    ahorroPrevisto: ahorro + ingresosPendientes - control.fijosGastoPendiente,
+    objetivoAhorro: control.objetivoAhorro,
+    escala: Math.max(control.ingresosPrevistos, totalGastos),
   }
 }
 
