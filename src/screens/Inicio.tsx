@@ -6,14 +6,14 @@ import { Icono, IconoCategoria } from '../components/Icono'
 import { ListaFijos } from '../components/ListaFijos'
 import { ProximosCargos } from '../components/ProximosCargos'
 import { TarjetaRecomendacion } from '../components/TarjetaRecomendacion'
-import { useControlMes, useTodosMovimientos } from '../data/consultas'
+import { useControlMes, useFijos, useTodosMovimientos } from '../data/consultas'
 import { useCategorias } from '../data/hooks'
 import { BloquePatrimonio } from '../components/BloquePatrimonio'
 import { revisionVista, useRecomendaciones } from '../data/recomendaciones'
 import type { Movimiento } from '../data/types'
 import { progresoPresupuestos } from '../lib/control'
 import type { Control } from '../lib/control'
-import { resumenFijos } from '../lib/fijos'
+import { pagosDeOtroMes, resumenFijos } from '../lib/fijos'
 import { hoyISO, mesActual, mesDeFecha, nombreMes, sumarMeses } from '../lib/meses'
 import { mediaMensual } from '../lib/presupuestos'
 import { mesDeCuenta } from '../lib/control'
@@ -95,6 +95,11 @@ export function Inicio() {
 
   const progreso = datos ? progresoPresupuestos(datos.control, datos.presupuestos, categorias) : []
   const fijos = datos?.control.fijosMes ?? []
+  const todosFijos = useFijos().data
+  const deOtroMes = useMemo(
+    () => (datos && todosFijos ? pagosDeOtroMes(datos.movimientos, todosFijos, mes) : []),
+    [datos, todosFijos, mes],
+  )
   const resumenF = resumenFijos(fijos)
   const cat = (id: string | null) => categorias.find((c) => c.id === id)
 
@@ -159,7 +164,7 @@ export function Inicio() {
                 {resumenF.pagados} de {resumenF.total} pagados: {fmt(resumenF.importePagado)} de {fmt(resumenF.importeTotal)}
               </p>
             )}
-            <ListaFijos items={fijos} mes={mes} />
+            <ListaFijos items={fijos} mes={mes} deOtroMes={deOtroMes} />
           </div>
 
           <div className="bloque">

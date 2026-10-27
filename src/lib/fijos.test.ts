@@ -8,6 +8,7 @@ import {
   fijoDesdeMovimiento,
   fijosDelMes,
   movimientoDePago,
+  pagosDeOtroMes,
   previstoPendiente,
   proximoMesQueToca,
   proximosCargos,
@@ -362,5 +363,27 @@ describe('proximosCargos', () => {
       'Ayer',
       'Hace 3 días',
     ])
+  })
+})
+
+describe('pagosDeOtroMes', () => {
+  const luz = fijo({ id: 'luz', nombre: 'Luz', diaMes: 1 })
+  const adelantada = pago({ id: 'a', fijoId: 'luz', fijoMes: '2026-11-01', fecha: '2026-10-27' })
+  const tarde = pago({ id: 't', fijoId: 'luz', fijoMes: '2026-09-01', fecha: '2026-10-02' })
+  const normal = pago({ id: 'n', fijoId: 'luz', fijoMes: '2026-10-01', fecha: '2026-10-01' })
+  const deNoviembre = pago({ id: 'x', fijoId: 'luz', fijoMes: '2026-12-01', fecha: '2026-11-28' })
+  const sinFijo = pago({ id: 's', fijoId: null, fijoMes: '2026-11-01', fecha: '2026-10-20' })
+
+  it('los pagos de este mes que son de otro mes, por fecha, adelantados o tarde', () => {
+    const r = pagosDeOtroMes([adelantada, tarde, normal, deNoviembre, sinFijo], [luz], '2026-10-01')
+    expect(r.map((x) => [x.pago.id, x.adelantado])).toEqual([
+      ['t', false],
+      ['a', true],
+    ])
+    expect(r[0].fijo).toBe(luz)
+  })
+
+  it('ignora los pagos de fijos que ya no existen', () => {
+    expect(pagosDeOtroMes([adelantada], [], '2026-10-01')).toEqual([])
   })
 })

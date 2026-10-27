@@ -161,6 +161,28 @@ export function proximosCargos(
   return resultado.sort((a, b) => a.dias - b.dias || a.fijo.nombre.localeCompare(b.fijo.nombre, 'es'))
 }
 
+export interface PagoDeOtroMes {
+  fijo: Fijo
+  pago: Movimiento
+  /** true: pago adelantado (el fijo es de un mes posterior); false: pagado tarde (de un mes anterior). */
+  adelantado: boolean
+}
+
+/**
+ * Pagos de fijos con fecha en `mes` que corresponden a otro mes: la luz de noviembre cobrada el 27 de
+ * octubre (adelantada) o la de septiembre cobrada el 2 de octubre (tarde). El gasto cuenta en el mes de
+ * su fecha, así que se enseñan en la lista de fijos de ese mes, aparte. Por fecha.
+ */
+export function pagosDeOtroMes(movimientos: Movimiento[], fijos: Fijo[], mes: Mes): PagoDeOtroMes[] {
+  const resultado: PagoDeOtroMes[] = []
+  for (const pago of movimientos) {
+    if (!pago.fijoId || !pago.fijoMes || pago.fijoMes === mes || mesDeFecha(pago.fecha) !== mes) continue
+    const fijo = fijos.find((f) => f.id === pago.fijoId)
+    if (fijo) resultado.push({ fijo, pago, adelantado: pago.fijoMes > mes })
+  }
+  return resultado.sort((a, b) => (a.pago.fecha < b.pago.fecha ? -1 : a.pago.fecha > b.pago.fecha ? 1 : 0))
+}
+
 /** "Hoy", "Mañana", "En 3 días", "Hace 2 días" para un cargo próximo. */
 export function textoDias(dias: number): string {
   if (dias === 0) return 'Hoy'

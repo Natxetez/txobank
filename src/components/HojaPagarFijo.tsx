@@ -7,7 +7,7 @@ import { aTextoEditable, parseImporte } from '../lib/dinero'
 import { esTraspasoAOtraEconomia, traspasoDePago, validarTraspasoEconomias } from '../lib/economias'
 import { movimientoDePago } from '../lib/fijos'
 import type { FijoDelMes } from '../lib/fijos'
-import { hoyISO, nombreMes } from '../lib/meses'
+import { hoyISO, mesDeFecha, nombreMes } from '../lib/meses'
 import { validarMovimiento } from '../lib/movimientos'
 import { Hoja } from './Hoja'
 import { useCuentasConEconomia } from './OpcionesCuentas'
@@ -88,13 +88,24 @@ export function HojaPagarFijo({ item, mes, onCerrar }: Props) {
             </select>
           </label>
         </div>
+        {fijo.tipo !== 'ingreso' && fecha && mesDeFecha(fecha) !== mes && (
+          <p className="ayuda nota-adelanto">
+            {mesDeFecha(fecha) < mes ? 'Adelantado: ' : 'Pagado tarde: '}
+            el gasto cuenta en {nombreMes(mesDeFecha(fecha))}, que es cuando sale el dinero, y en {nombreMes(mes)} queda
+            como pagado.
+          </p>
+        )}
         {error && (
           <p className="error" role="alert">
             {error}
           </p>
         )}
         <button type="submit" className="primario" disabled={enviando}>
-          {enviando ? 'Guardando…' : `Marcar como ${VERBO[fijo.tipo]}`}
+          {enviando
+            ? 'Guardando…'
+            : fijo.tipo !== 'ingreso' && mesDeFecha(fecha) < mes
+              ? `Adelantar a ${nombreMes(mesDeFecha(fecha))}`
+              : `Marcar como ${VERBO[fijo.tipo]}`}
         </button>
       </form>
     </Hoja>

@@ -6,14 +6,15 @@ import type { CargoProximo } from '../lib/fijos'
 import { hoyISO, mesActual, sumarMeses } from '../lib/meses'
 import { useFmt } from './Discreto'
 import { HojaPagarFijo } from './HojaPagarFijo'
-import { BOTON_PAGAR } from './ListaFijos'
+import { textoPagar } from './ListaFijos'
 
 /** Días de antelación con los que se avisa de un cargo. */
-const VENTANA_DIAS = 7
+const VENTANA_DIAS = 10
 
 /**
- * "Próximos cargos": fijos de los próximos 7 días (también del mes siguiente) y los que ya deberían
- * haberse cobrado. Es un recordatorio: no cuentan en el gasto del mes hasta que se marcan como pagados.
+ * "Próximos cargos": fijos de los próximos 10 días (también del mes siguiente, que se pueden adelantar)
+ * y los que ya deberían haberse cobrado. Es un recordatorio: no cuentan en el gasto del mes hasta que se
+ * marcan como pagados.
  */
 export function ProximosCargos() {
   const fmt = useFmt()
@@ -55,7 +56,7 @@ export function ProximosCargos() {
               </span>
               {c.fijo.descripcion && <span className="secundario pequeno descripcion">{c.fijo.descripcion}</span>}
               <button type="button" className="chip activo" onClick={() => setPagando(c)}>
-                {BOTON_PAGAR[c.fijo.tipo]}
+                {textoPagar(c.fijo.tipo, c.mes)}
               </button>
             </article>
           )

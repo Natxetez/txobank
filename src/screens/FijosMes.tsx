@@ -1,11 +1,11 @@
 import { Volver } from '../components/Volver'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListaFijos } from '../components/ListaFijos'
 import { SelectorMes } from '../components/SelectorMes'
 import { useFmt } from '../components/Discreto'
-import { useControlMes } from '../data/consultas'
-import { resumenFijos } from '../lib/fijos'
+import { useControlMes, useFijos } from '../data/consultas'
+import { pagosDeOtroMes, resumenFijos } from '../lib/fijos'
 import { etiquetaMes, mesActual } from '../lib/meses'
 
 /** Fijos de un mes: qué toca, qué está pagado y qué falta. */
@@ -15,6 +15,11 @@ export function FijosMes() {
   const { datos, cargando, error } = useControlMes(mes)
 
   const resumen = datos ? resumenFijos(datos.control.fijosMes) : null
+  const todosFijos = useFijos().data
+  const deOtroMes = useMemo(
+    () => (datos && todosFijos ? pagosDeOtroMes(datos.movimientos, todosFijos, mes) : []),
+    [datos, todosFijos, mes],
+  )
 
   return (
     <section className="pantalla ancho">
@@ -33,7 +38,7 @@ export function FijosMes() {
               {resumen.pagados} de {resumen.total} pagados: {fmt(resumen.importePagado)} de {fmt(resumen.importeTotal)}
             </p>
           )}
-          <ListaFijos items={datos.control.fijosMes} mes={mes} />
+          <ListaFijos items={datos.control.fijosMes} mes={mes} deOtroMes={deOtroMes} />
         </>
       )}
       <Link to="/ajustes/fijos" className="enlace">
