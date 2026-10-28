@@ -347,12 +347,44 @@ export interface EconomiasApi {
   saldosDeTodas(): Promise<DeEconomia<Saldo>[]>
   otrosSaldosDeTodas(): Promise<DeEconomia<OtroSaldo>[]>
   historialDeTodas(): Promise<ActualizacionSaldo[]>
+  /** Movimientos de todas las economías hasta una fecha (incluida), para el patrimonio total. */
+  movimientosDeTodas(hasta: Fecha): Promise<Movimiento[]>
 }
 
-/** Operaciones de mantenimiento, temporales mientras la app está en pruebas. */
-export interface MantenimientoApi {
-  /** Borra todas las economías del usuario con sus datos (no el usuario). Después la app empieza de cero. */
-  borrarTodo(): Promise<void>
+/** Todos los datos de una economía, tal cual, para la copia de seguridad. */
+export interface EconomiaEnCopia {
+  economia: { id: string; nombre: string; color: string; orden: number }
+  ajustes: Ajustes
+  cuentas: Cuenta[]
+  categorias: Categoria[]
+  presupuestos: Presupuesto[]
+  fijos: Fijo[]
+  omitidos: FijoOmitido[]
+  fechas: FijoFecha[]
+  movimientos: Movimiento[]
+  grupos: Grupo[]
+  otrosSaldos: OtroSaldo[]
+  historial: ActualizacionSaldo[]
+}
+
+/** Copia de seguridad completa (archivo JSON que descarga el usuario). */
+export interface CopiaSeguridad {
+  formato: 'txobank-copia'
+  version: 1
+  creada: FechaHora
+  /** Versión de la app que la hizo. */
+  versionApp: string
+  economias: EconomiaEnCopia[]
+}
+
+export interface CopiaApi {
+  /** Todos los datos de todas las economías a las que tiene acceso el usuario. */
+  exportar(): Promise<EconomiaEnCopia[]>
+  /**
+   * Crea las economías de la copia, con sus ids tal cual (ya renombrados y con ids nuevos: ver
+   * `src/lib/copia.ts`). No toca las economías que ya existen. Si algo falla, borra lo que llegó a crear.
+   */
+  restaurar(economias: EconomiaEnCopia[]): Promise<void>
 }
 
 export interface SesionApi {
@@ -389,5 +421,5 @@ export interface DataSource {
   saldos: SaldosApi
   grupos: GruposApi
   otrosSaldos: OtrosSaldosApi
-  mantenimiento: MantenimientoApi
+  copia: CopiaApi
 }

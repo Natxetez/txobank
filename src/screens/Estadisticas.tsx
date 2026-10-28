@@ -1,5 +1,6 @@
 import { Icono } from '../components/Icono'
 import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Area,
@@ -16,7 +17,17 @@ import {
 } from 'recharts'
 import { useFmt } from '../components/Discreto'
 import { useHojaMovimiento } from '../components/ContextoMovimiento'
-import { useControlMes, useHistorialSaldos, useOtrosSaldos, useTodosMovimientos } from '../data/consultas'
+import {
+  opcCuentasDeTodas,
+  opcHistorialDeTodas,
+  opcMovimientosDeTodas,
+  opcOtrosSaldosDeTodas,
+  useControlMes,
+  useHistorialSaldos,
+  useOtrosSaldos,
+  useTodosMovimientos,
+} from '../data/consultas'
+import { useEconomia } from '../data/EconomiaContext'
 import { useAjustes, useCategorias, useCuentas } from '../data/hooks'
 import type { Categoria, Movimiento } from '../data/types'
 import { objetivoAhorro } from '../lib/control'
@@ -131,7 +142,24 @@ export default function Estadisticas() {
       }),
     [cuentas, todos.data, mesesGrafico, hoy, cuentaId, otrosSaldos, historialSaldos],
   )
-  const conOtrosSaldos = patrimonio.some((p) => p.otros !== 0)
+  // Con varias economías, la evolución se puede ver de todas juntas (sin el filtro de cuenta, que es de esta).
+  const { economias } = useEconomia()
+  const variasEconomias = economias.length > 1
+  const [deTodas, setDeTodas] = useState(false)
+  const verTodas = variasEconomias && deTodas
+  const cuentasTodas = useQuery({ ...opcCuentasDeTodas(), enabled: verTodas }).data
+  const movsTodas = useQuery({ ...opcMovimientosDeTodas(hoy), enabled: verTodas }).data
+  const otrosTodas = useQuery({ ...opcOtrosSaldosDeTodas(), enabled: verTodas }).data
+  const historialTodas = useQuery({ ...opcHistorialDeTodas(), enabled: verTodas }).data
+  const patrimonioTodas = useMemo(
+    () =>
+      cuentasTodas && movsTodas && otrosTodas && historialTodas
+        ? patrimonioPorMes(cuentasTodas, movsTodas, mesesGrafico, hoy, undefined, { otros: otrosTodas, historial: historialTodas })
+        : null,
+    [cuentasTodas, movsTodas, otrosTodas, historialTodas, mesesGrafico, hoy],
+  )
+  const serie = verTodas ? (patrimonioTodas ?? []) : patrimonio
+  const conOtrosSaldos = serie.some((p) => p.otros !== 0)
 
   const fijosPendientes = control
     ? control.control.fijosMes
@@ -363,9 +391,30 @@ export default function Estadisticas() {
       </Tarjeta>
 
       <Tarjeta titulo="Evolución del patrimonio">
+        {variasEconomias && (
+          <div className="segmentado" role="radiogroup" aria-label="Patrimonio de">
+            {[
+              { valor: false, texto: 'Esta economía' },
+              { valor: true, texto: 'Todas' },
+            ].map((o) => (
+              <button
+                key={o.texto}
+                type="button"
+                role="radio"
+                aria-checked={deTodas === o.valor}
+                className={deTodas === o.valor ? 'activa' : ''}
+                onClick={() => setDeTodas(o.valor)}
+              >
+                {o.texto}
+              </button>
+            ))}
+          </div>
+        )}
+        {verTodas && cuentaId && <p className="secundario pequeno">De todas las economías: sin el filtro de cuenta.</p>}
+        {verTodas && !patrimonioTodas && <p className="secundario">Cargando…</p>}
         <div className="alto-grafico corto">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={patrimonio} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+            <AreaChart data={serie} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
               <CartesianGrid stroke="var(--borde)" vertical={false} />
               <XAxis dataKey="mes" tickFormatter={abreviaturaMes} tick={EJE} tickLine={false} axisLine={false} />
               <YAxis tick={EJE} tickLine={false} axisLine={false} tickFormatter={eje} width={52} domain={['auto', 'auto']} />
@@ -385,7 +434,7 @@ export default function Estadisticas() {
           <p className="leyenda">
             <span className="l l-cuentas">Cuentas</span>
             <span className="l l-otros">Otros saldos</span>
-            <span>Hoy: {fmt(patrimonio[patrimonio.length - 1]?.saldo ?? 0)}</span>
+            <span>Hoy: {fmt(serie[serie.length - 1]?.saldo ?? 0)}</span>
           </p>
         )}
       </Tarjeta>

@@ -8,8 +8,8 @@ import { opcFijos } from '../../data/consultas'
 import { useSesion } from '../../data/SesionContext'
 import { mensajeError } from '../../data/hooks'
 import { useQueryClient } from '@tanstack/react-query'
-import { Hoja } from '../../components/Hoja'
 import { useEconomia } from '../../data/EconomiaContext'
+import { textoUltimaCopia } from './ultimaCopia'
 import { VERSION } from '../../version'
 import { guardarTema, leerTema } from '../../tema'
 import type { Tema } from '../../tema'
@@ -67,6 +67,16 @@ export function Ajustes() {
           </span>
           <Icono nombre="derecha" className="chevron" />
         </Link>
+        <Link to="/ajustes/copia" className="fila">
+          <IconoCategoria color="#15AABF">
+            <Icono nombre="exportar" />
+          </IconoCategoria>
+          <span className="fila-texto">
+            <span>Copia de seguridad</span>
+            <span className="secundario pequeno">{textoUltimaCopia()}</span>
+          </span>
+          <Icono nombre="derecha" className="chevron" />
+        </Link>
       </nav>
       <p className="secundario pequeno ajustes-de">Ajustes de {activa.nombre}</p>
       <nav className="lista" aria-label="Ajustes">
@@ -115,7 +125,6 @@ export function Ajustes() {
           </button>
         </li>
       </ul>
-      <ZonaPruebas />
     </section>
   )
 }
@@ -152,84 +161,6 @@ function Apariencia() {
       <p className="secundario pequeno">
         {tema === 'sistema' ? 'Sigue el modo claro u oscuro del iPhone.' : 'Se guarda en este dispositivo.'}
       </p>
-    </div>
-  )
-}
-
-/** Temporal: solo mientras la app está en pruebas. Borra todos los datos del usuario (no el usuario). */
-function ZonaPruebas() {
-  const qc = useQueryClient()
-  const [abierta, setAbierta] = useState(false)
-  const [texto, setTexto] = useState('')
-  const [borrando, setBorrando] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const confirmado = texto.trim().toUpperCase() === 'BORRAR'
-
-  function cerrar() {
-    if (borrando) return
-    setAbierta(false)
-    setTexto('')
-    setError(null)
-  }
-
-  async function borrar() {
-    setError(null)
-    setBorrando(true)
-    try {
-      await dataSource.mantenimiento.borrarTodo()
-      qc.clear()
-      window.location.reload()
-    } catch (err) {
-      setError(mensajeError(err))
-      setBorrando(false)
-    }
-  }
-
-  return (
-    <div className="zona-pruebas">
-      <p className="zona-pruebas-titulo">Zona de pruebas</p>
-      <p className="secundario pequeno">
-        Solo mientras la app está en pruebas. Desaparecerá en la versión definitiva.
-      </p>
-      <button type="button" className="secundario-btn borrar" onClick={() => setAbierta(true)}>
-        Borrar todo
-      </button>
-      {abierta && (
-        <Hoja titulo="Borrar todo" onCerrar={cerrar}>
-          <form
-            className="formulario"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (confirmado && !borrando) void borrar()
-            }}
-          >
-            <p className="aviso-suma">
-              Se borrarán todas tus economías con todos sus datos: movimientos, fijos, presupuestos, grupos, otros
-              saldos, categorías, cuentas y ajustes. Tu usuario se mantiene. No se puede deshacer.
-            </p>
-            <label className="campo">
-              Escribe BORRAR para confirmar
-              <input
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                autoCapitalize="characters"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="BORRAR"
-              />
-            </label>
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-            <button type="submit" className="peligro" disabled={!confirmado || borrando}>
-              {borrando ? 'Borrando…' : 'Borrar todo'}
-            </button>
-          </form>
-        </Hoja>
-      )}
     </div>
   )
 }

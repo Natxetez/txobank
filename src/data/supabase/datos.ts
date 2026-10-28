@@ -17,7 +17,8 @@ import type {
   FijoFecha,
   Grupo,
   GruposApi,
-  MantenimientoApi,
+  CopiaApi,
+  EconomiaEnCopia,
   NuevoGrupo,
   NuevoOtroSaldo,
   OtroSaldo,
@@ -904,18 +905,112 @@ export function crearEconomiasApi(client: SupabaseClient, ambito: Ambito): Econo
       )
       return filas.map(aActualizacion)
     },
+    async movimientosDeTodas(hasta) {
+      const filas = await paginar<FilaMovimiento>((inicio, fin) =>
+        client.from('movimientos').select('*').lte('fecha', hasta).order('id').range(inicio, fin),
+      )
+      return filas.map(aMovimiento)
+    },
   }
 }
 
-// --- Mantenimiento ---------------------------------------------------------
+// --- Copia de seguridad ----------------------------------------------------
 
-export function crearMantenimientoApi(client: SupabaseClient): MantenimientoApi {
+/** Todas las filas de una tabla de esas economías, página a página (`orden`: columnas que la ordenan de forma estable). */
+function filasDe<T>(client: SupabaseClient, tabla: string, economias: string[], orden: string[]) {
+  return paginar<T & { economia_id: string }>((inicio, fin) => {
+    let consulta = client.from(tabla).select('*').in('economia_id', economias)
+    for (const columna of orden) consulta = consulta.order(columna)
+    return consulta.range(inicio, fin)
+  })
+}
+
+/** Inserta filas en tandas (un insert con miles de filas puede pasarse del tamaño máximo de la petición). */
+async function insertarEnTandas(client: SupabaseClient, tabla: string, filas: Record<string, unknown>[]) {
+  for (let i = 0; i < filas.length; i += 500) {
+    const { error } = await client.from(tabla).insert(filas.slice(i, i + 500))
+    comprobar(error)
+  }
+}
+
+export function crearCopiaApi(client: SupabaseClient): CopiaApi {
   return {
-    async borrarTodo() {
-      const userId = await idUsuario(client)
-      const { data, error } = await client.from('economias').select('id').eq('propietario_id', userId)
+    async exportar() {
+      const { data, error } = await client.from('economias').select('*').order('orden').order('creado')
       comprobar(error)
-      for (const { id } of data as { id: string }[]) await borrarEconomia(client, id)
+      const economias = data as FilaEconomia[]
+      const ids = economias.map((e) => e.id)
+      if (ids.length === 0) return []
+      const [ajustes, cuentas, categorias, presupuestos, fijos, omitidos, fechas, movimientos, grupos, otros, historial] =
+        await Promise.all([
+          filasDe<FilaAjustes>(client, 'ajustes', ids, ['economia_id']),
+          filasDe<FilaCuenta>(client, 'cuentas', ids, ['id']),
+          filasDe<FilaCategoria>(client, 'categorias', ids, ['id']),
+          filasDe<{ id: string; mes: string; categoria_id: string | null; importe: number | null }>(client, 'presupuestos', ids, ['id']),
+          filasDe<FilaFijo>(client, 'fijos', ids, ['id']),
+          filasDe<{ fijo_id: string; mes: string }>(client, 'fijos_omitidos', ids, ['fijo_id', 'mes']),
+          filasDe<{ fijo_id: string; mes: string; fecha: string }>(client, 'fijos_fechas', ids, ['fijo_id', 'mes']),
+          filasDe<FilaMovimiento>(client, 'movimientos', ids, ['id']),
+          filasDe<FilaGrupo>(client, 'grupos', ids, ['id']),
+          filasDe<FilaOtroSaldo>(client, 'otros_saldos', ids, ['id']),
+          filasDe<FilaActualizacion>(client, 'otros_saldos_historial', ids, ['id']),
+        ])
+      return economias.map((e): EconomiaEnCopia => {
+        const de = <T extends { economia_id: string }>(filas: T[]) => filas.filter((f) => f.economia_id === e.id)
+        const a = de(ajustes)[0]
+        return {
+          economia: { id: e.id, nombre: e.nombre, color: e.color, orden: e.orden },
+          ajustes: { ahorroTipo: a?.ahorro_tipo ?? null, ahorroValor: a?.ahorro_valor ?? null },
+          cuentas: de(cuentas).map(aCuenta),
+          categorias: de(categorias).map(aCategoria),
+          presupuestos: de(presupuestos).map((f) => ({ id: f.id, mes: f.mes, categoriaId: f.categoria_id, importe: f.importe })),
+          fijos: de(fijos).map(aFijo),
+          omitidos: de(omitidos).map((f) => ({ fijoId: f.fijo_id, mes: f.mes })),
+          fechas: de(fechas).map((f) => ({ fijoId: f.fijo_id, mes: f.mes, fecha: f.fecha })),
+          movimientos: de(movimientos).map(aMovimiento),
+          grupos: de(grupos).map(aGrupo),
+          otrosSaldos: de(otros).map(aOtroSaldo),
+          historial: de(historial).map(aActualizacion),
+        }
+      })
+    },
+    async restaurar(economias) {
+      const filas = (f: (e: EconomiaEnCopia) => Record<string, unknown>[]) =>
+        economias.flatMap((e) => f(e).map((fila) => ({ ...fila, economia_id: e.economia.id })))
+      try {
+        const { error } = await client.from('economias').insert(
+          economias.map((e) => ({ id: e.economia.id, nombre: e.economia.nombre, color: e.economia.color, orden: e.economia.orden })),
+        )
+        comprobar(error)
+        // En un orden que respeta las claves foráneas: primero lo que otras filas referencian.
+        await insertarEnTandas(client, 'ajustes', filas((e) => [{ ahorro_tipo: e.ajustes.ahorroTipo, ahorro_valor: e.ajustes.ahorroValor }]))
+        await insertarEnTandas(client, 'cuentas', filas((e) => e.cuentas.map((c) => ({ ...aFilaCuenta(c), id: c.id }))))
+        await insertarEnTandas(client, 'categorias', filas((e) => e.categorias.map((c) => ({ ...aFilaCategoria(c), id: c.id }))))
+        await insertarEnTandas(client, 'grupos', filas((e) => e.grupos.map((g) => ({ ...aFilaGrupo(g), id: g.id }))))
+        await insertarEnTandas(client, 'otros_saldos', filas((e) => e.otrosSaldos.map((o) => ({ ...aFilaOtroSaldo(o), id: o.id }))))
+        await insertarEnTandas(
+          client,
+          'otros_saldos_historial',
+          filas((e) => e.historial.map((h) => ({ id: h.id, otro_saldo_id: h.otroSaldoId, saldo: h.saldo, fecha_hora: h.fechaHora }))),
+        )
+        await insertarEnTandas(client, 'fijos', filas((e) => e.fijos.map((f) => ({ ...aFilaFijo(f), id: f.id }))))
+        await insertarEnTandas(client, 'fijos_omitidos', filas((e) => e.omitidos.map((o) => ({ fijo_id: o.fijoId, mes: o.mes }))))
+        await insertarEnTandas(
+          client,
+          'fijos_fechas',
+          filas((e) => e.fechas.map((x) => ({ fijo_id: x.fijoId, mes: x.mes, fecha: x.fecha }))),
+        )
+        await insertarEnTandas(
+          client,
+          'presupuestos',
+          filas((e) => e.presupuestos.map((p) => ({ id: p.id, mes: p.mes, categoria_id: p.categoriaId, importe: p.importe }))),
+        )
+        await insertarEnTandas(client, 'movimientos', filas((e) => e.movimientos.map((m) => ({ ...aFilaMovimiento(m), id: m.id }))))
+      } catch (err) {
+        // Sin transacciones desde el navegador: se deshace lo creado para no dejar economías a medias.
+        for (const e of economias) await borrarEconomia(client, e.economia.id).catch(() => undefined)
+        throw err
+      }
     },
   }
 }

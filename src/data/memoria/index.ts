@@ -351,6 +351,9 @@ export function crearMemoriaDataSource(): DataSource {
       async historialDeTodas() {
         return [...libros.values()].flatMap((l) => l.historial)
       },
+      async movimientosDeTodas(hasta) {
+        return [...libros.values()].flatMap((l) => l.movimientos.filter((m) => m.fecha <= hasta))
+      },
     },
     ajustes: {
       async obtener() {
@@ -568,11 +571,33 @@ export function crearMemoriaDataSource(): DataSource {
         quitar(L().historial, (h) => h.id === id)
       },
     },
-    mantenimiento: {
-      async borrarTodo() {
-        economias = []
-        libros.clear()
-        activa = null
+    copia: {
+      async exportar() {
+        return [...economias]
+          .sort((a, b) => a.orden - b.orden)
+          .map((e) => {
+            const l = libros.get(e.id) ?? libroVacio()
+            return {
+              economia: { id: e.id, nombre: e.nombre, color: e.color, orden: e.orden },
+              ajustes: { ...l.ajustes },
+              cuentas: [...l.cuentas],
+              categorias: [...l.categorias],
+              presupuestos: [...l.presupuestos],
+              fijos: [...l.fijos],
+              omitidos: [...l.omitidos],
+              fechas: [...l.fechas],
+              movimientos: [...l.movimientos],
+              grupos: [...l.grupos],
+              otrosSaldos: [...l.otrosSaldos],
+              historial: [...l.historial],
+            }
+          })
+      },
+      async restaurar(nuevas) {
+        for (const { economia: e, ...datos } of nuevas) {
+          economias.push({ ...e, propia: true })
+          libros.set(e.id, { ...datos, ajustes: { ...datos.ajustes } })
+        }
       },
     },
   }

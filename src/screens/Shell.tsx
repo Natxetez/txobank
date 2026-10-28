@@ -8,6 +8,7 @@ import { hoyISO, sumarDias } from '../lib/meses'
 import { Ajustes } from './ajustes/Ajustes'
 import { AjustesAhorro } from './ajustes/AjustesAhorro'
 import { AjustesCategorias } from './ajustes/AjustesCategorias'
+import { AjustesCopia } from './ajustes/AjustesCopia'
 import { AjustesCuentas } from './ajustes/AjustesCuentas'
 import { AjustesEconomias } from './ajustes/AjustesEconomias'
 import { AcercaDe } from './ajustes/AcercaDe'
@@ -61,6 +62,7 @@ function Estructura() {
             <Route path="/estadisticas/categoria/:id" element={<CategoriaDetalle />} />
             <Route path="/ajustes" element={<Ajustes />} />
             <Route path="/ajustes/economias" element={<AjustesEconomias />} />
+            <Route path="/ajustes/copia" element={<AjustesCopia />} />
             <Route path="/ajustes/cuentas" element={<AjustesCuentas />} />
             <Route path="/ajustes/categorias" element={<AjustesCategorias />} />
             <Route path="/ajustes/fijos" element={<AjustesFijos />} />

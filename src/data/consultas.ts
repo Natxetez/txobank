@@ -60,6 +60,10 @@ export const opcHistorialDeTodas = () => ({
   queryKey: ['historialSaldos', 'todas'] as const,
   queryFn: () => dataSource.economias.historialDeTodas(),
 })
+export const opcMovimientosDeTodas = (hasta: Fecha) => ({
+  queryKey: ['movimientos', 'todas', hasta] as const,
+  queryFn: () => dataSource.economias.movimientosDeTodas(hasta),
+})
 export const opcTraspasoEconomias = (traspasoId: string) => ({
   queryKey: ['movimientos', 'traspaso', traspasoId] as const,
   queryFn: () => dataSource.movimientos.obtenerTraspasoEconomias(traspasoId),

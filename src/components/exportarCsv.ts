@@ -16,7 +16,14 @@ export async function entregarCsv(
 ): Promise<boolean> {
   const nombre = `txobank-${hoyISO()}.csv`
   const contenido = conBom(movimientosACsv(movs, cuentas, categorias, fijos, grupos))
-  const archivo = new File([contenido], nombre, { type: 'text/csv;charset=utf-8' })
+  return entregarArchivo(new File([contenido], nombre, { type: 'text/csv;charset=utf-8' }))
+}
+
+/**
+ * Entrega un archivo al usuario: en iPhone, con el menú de compartir (para guardarlo en Archivos); si el
+ * navegador no puede compartir archivos, se descarga. Devuelve false si la persona cancela.
+ */
+export async function entregarArchivo(archivo: File): Promise<boolean> {
 
   if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [archivo] })) {
     try {
@@ -31,7 +38,7 @@ export async function entregarCsv(
   const url = URL.createObjectURL(archivo)
   const enlace = document.createElement('a')
   enlace.href = url
-  enlace.download = nombre
+  enlace.download = archivo.name
   document.body.appendChild(enlace)
   enlace.click()
   enlace.remove()

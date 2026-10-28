@@ -28,7 +28,7 @@
 - Recomendaciones automáticas basadas en mis datos (sección 11).
 - Modo discreto para ocultar importes.
 - Tema automático (el del sistema), claro u oscuro, a elegir en Ajustes.
-- Exportación a CSV.
+- Exportación a CSV y copia de seguridad completa (descargar y restaurar).
 - Instalable como PWA desde GitHub Pages.
 
 ### Para más adelante
@@ -81,7 +81,7 @@ Configuración:
 - Las pantallas **nunca** importan `@supabase/supabase-js`. Todo pasa por una interfaz `DataSource` definida en `src/data/types.ts`.
 - Los tipos del dominio (`Economia`, `Cuenta`, `Categoria`, `Presupuesto`, `Movimiento`, `TraspasoEconomias`, `Fijo`, `Ajustes`, `Saldo`, `Grupo`, `OtroSaldo`, `ActualizacionSaldo`) son TypeScript puro, sin depender de Supabase. Cada adaptador traduce entre sus filas y estos tipos.
 - Implementación inicial en `src/data/supabase/`. El adaptador se elige al compilar con `VITE_DATA_BACKEND`: usar otra base de datos en el futuro = escribir otro adaptador que cumpla la misma interfaz y cambiar la variable.
-- La interfaz cubre: sesión (iniciar y cerrar, sesión actual, cambios de sesión), economías (listar, crear, editar, borrar, elegir la activa y datos de todas para los traspasos y el patrimonio total), ajustes, cuentas, categorías, presupuestos, movimientos (listar por rango de fechas con filtros, crear, editar, borrar, y crear, editar y borrar traspasos entre economías), fijos (incluidos sus pagos, omisiones y fechas cambiadas para un mes), saldos, grupos de gastos, otros saldos con su historial y, mientras la app está en pruebas, "borrar todo".
+- La interfaz cubre: sesión (iniciar y cerrar, sesión actual, cambios de sesión), economías (listar, crear, editar, borrar, elegir la activa y datos de todas para los traspasos y el patrimonio total), ajustes, cuentas, categorías, presupuestos, movimientos (listar por rango de fechas con filtros, crear, editar, borrar, y crear, editar y borrar traspasos entre economías), fijos (incluidos sus pagos, omisiones y fechas cambiadas para un mes), saldos, grupos de gastos, otros saldos con su historial y la copia de seguridad (exportar todo y restaurar).
 - **Economía activa**: el resto de la interfaz trabaja siempre sobre la economía elegida con `economias.activar(id)`; el adaptador filtra cada consulta por ella y crea en ella lo nuevo. Al cambiar de economía la app descarta la caché y vuelve a montar las pantallas.
 - Control del mes, fijos, estadísticas y recomendaciones se calculan en `src/lib/` como funciones puras sobre los datos, sin depender de la base de datos.
 - Supabase devuelve por defecto como máximo 1000 filas por consulta: el adaptador debe paginar al listar movimientos y pagos de fijos.
@@ -419,11 +419,11 @@ Barra inferior: **Inicio**, **Movimientos**, botón central **+**, **Estadístic
 - **Otros saldos**: total arriba y lista con su saldo y la fecha y hora de la última actualización. Crear (con saldo inicial, que queda como primera actualización), editar, archivar (con aviso: su saldo pasa a 0 € y queda apuntado en el historial) y eliminar (borra también su historial). Al tocar uno: actualizar su saldo (con fecha y hora editables, por defecto ahora; admite negativos) y ver el historial con la diferencia frente a la actualización anterior, pudiendo borrar una.
 - Categorías: pestañas Gasto / Ingreso. Crear, renombrar, emoji, color, reordenar y archivar. Una categoría con movimientos no se borra, se archiva.
 - Exportar CSV.
+- **Copia de seguridad** (sección 14), junto a Economías porque abarca todas: descargar y restaurar, con la fecha de la última copia descargada en el dispositivo.
 - **Apariencia**: Automático (el del sistema), Claro u Oscuro. Se recuerda en el dispositivo.
 - Seguridad: activar o desactivar la verificación en dos pasos (sección 4).
 - Acerca de: versión, commit, fecha de compilación, base de datos en uso y usuario.
 - Cerrar sesión.
-- **Zona de pruebas** (temporal): **Borrar todo**, que borra todas las economías del usuario con sus datos tras escribir BORRAR y vuelve a la primera economía.
 
 ## 9. Reglas de negocio
 
@@ -449,7 +449,7 @@ Controles arriba: periodo (**Este mes**, **3 meses**, **Este año**, **12 meses*
 3. **Fijo frente a variable**: barras apiladas por mes con la parte fija y la variable del gasto.
 4. **Calendario de gasto**: cuadrícula del mes, con semanas de lunes a domingo, con cada día coloreado según el gasto variable. Encima, los días sin gasto y la racha actual. Tocar un día muestra sus movimientos.
 5. **Ingresos y gastos por mes**: barras agrupadas de los meses del periodo, con una línea de ahorro.
-6. **Evolución del patrimonio**: saldo de las cuentas al final de cada mes más, con todas las cuentas seleccionadas, el de los otros saldos activos (su última actualización hasta ese día), apilados. Con una cuenta concreta, solo esa cuenta.
+6. **Evolución del patrimonio**: saldo de las cuentas al final de cada mes más, con todas las cuentas seleccionadas, el de los otros saldos activos (su última actualización hasta ese día), apilados. Con una cuenta concreta, solo esa cuenta. Con varias economías, un selector **Esta economía / Todas** muestra la evolución de todas juntas (sin el filtro de cuenta); los traspasos entre economías se compensan.
 7. **Ingresos por categoría**: barras horizontales sencillas.
 
 **Detalle de categoría**: evolución de 12 meses, media mensual, presupuesto de cada mes, número de movimientos, ticket medio y los 5 mayores gastos.
@@ -516,9 +516,15 @@ Funciones puras en `src/lib/` con tests de Vitest:
 - Grupos: separación de sueltos y agrupados, resumen mensual por grupo y validación.
 - Otros saldos: saldo actual, saldo a una fecha o fin de mes y totales.
 
-## 14. Exportación CSV
+## 14. Exportación CSV y copia de seguridad
 
 Todos los movimientos, ordenados por fecha. Columnas: fecha, hora, tipo, importe, cuenta, cuenta_destino, categoria, concepto, descripcion, grupo (nombre del grupo, si lo es), fijo (nombre del fijo, si lo es) y cuenta_para_mes. Ordenados por fecha y hora (en ingresos imputados a otro mes). Separador `;` y decimales con coma, para que Excel y Numbers en español lo abran bien. UTF-8 con BOM. En iPhone, compartir con la Web Share API (para guardarlo en Archivos); si no está disponible, descarga normal.
+
+**Copia de seguridad.** El CSV es de la economía activa y solo lleva movimientos; la copia de seguridad lo lleva todo:
+
+- **Descargar**: un archivo JSON (`txobank-copia-AAAA-MM-DD.json`) con todas las economías a las que tengo acceso y, de cada una, ajustes, cuentas, categorías, presupuestos, fijos (con omisiones y fechas cambiadas), movimientos, grupos, otros saldos y su historial, tal cual (tipos del dominio, con sus ids). Lleva `formato: "txobank-copia"`, `version: 1`, la fecha y la versión de la app. Se entrega igual que el CSV. La app recuerda en el dispositivo cuándo se descargó la última y avisa a partir de 30 días.
+- **Restaurar**: se elige el archivo, se ve un resumen (fecha y, por economía, cuentas, movimientos y fijos) y se confirma. Las economías de la copia **se añaden como nuevas**, nunca sobrescriben ni borran: todo recibe ids nuevos con las referencias actualizadas, y si una economía se llama como otra existente se le añade "(restaurada)". Los traspasos entre economías se mantienen si sus dos mitades están en la copia; si no, quedan como gastos o ingresos normales. Si falla a medias, se borra lo que llegó a crear.
+- La lógica (leer y validar el archivo, resumen y preparación con ids nuevos) está en `src/lib/copia.ts`, con tests; el adaptador solo lee e inserta filas.
 
 ## 15. Plan por fases
 
@@ -570,7 +576,8 @@ Nota: el plan gratuito de Supabase pausa los proyectos con poca actividad durant
 - La versión de la app (`package.json`) se muestra en el inicio de sesión y en Ajustes → Acerca de, con el commit del que se compiló.
 - Archivar una cuenta o un otro saldo lo deja a 0, para que el patrimonio cuadre siempre con el dinero que de verdad se tiene.
 - La verificación en dos pasos es opcional; si está activada, la exige el servidor, no solo la app. Si se pierde la app autenticadora, el factor se borra desde el panel de Supabase.
-- "Borrar todo" en Ajustes es temporal: se quitará cuando haya una versión validada.
+- Ya no hay "Borrar todo": se quitó al validar la versión. Se pueden borrar economías (salvo la única que quede) desde Ajustes → Economías.
+- La copia de seguridad la descarga y guarda el usuario (no hay copias automáticas, porque no hay servidor). Restaurar siempre añade economías nuevas, nunca sobrescribe.
 - Todo pertenece a una **economía**; un usuario puede tener varias y cambiar de una a otra. Cada una tiene sus propias categorías, presupuestos y ajustes. De momento solo entra su propietario, pero la base de datos está preparada para compartirlas.
 - Un traspaso entre economías es un gasto en la de origen y un ingreso en la de destino (dos movimientos enlazados), y puede ser un fijo.
-- El patrimonio total de todas las economías se ve en Inicio (solo el valor actual; la evolución del patrimonio en Estadísticas es de la economía activa).
+- El patrimonio total de todas las economías se ve en Inicio (valor actual) y en Estadísticas (evolución, con el selector Esta economía / Todas).

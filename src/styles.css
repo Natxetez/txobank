@@ -567,10 +567,6 @@ button.fila:active, a.fila:active { background: var(--superficie-2); }
 .fila-valor { flex: none; font-size: 0.9rem; }
 
 /* Zona de pruebas (temporal) */
-.zona-pruebas { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 16px; border: 1.5px dashed color-mix(in srgb, var(--peligro) 45%, transparent); border-radius: var(--radio); }
-.zona-pruebas p { margin: 0; }
-.zona-pruebas-titulo { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--peligro); }
-.zona-pruebas .secundario-btn { margin-top: 4px; }
 
 /* ---------------------------------------------------------------- Inicio: cifra protagonista */
 .protagonista {
@@ -980,3 +976,12 @@ button.volver { border: 0; padding: 0 6px 0 0; background: transparent; font: in
 .ig-punto.fijo.pendiente { background: repeating-linear-gradient(135deg, var(--ig-fijo) 0 2px, transparent 2px 4px); }
 .apariencia { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .apariencia .segmentado { width: 100%; }
+
+/* ---------------------------------------------------------------- Copia de seguridad */
+.tarjeta.copia { display: flex; flex-direction: column; gap: 12px; }
+.tarjeta.copia h2 { margin: 0; font-size: 1.1rem; }
+.tarjeta.copia p { margin: 0; }
+.boton-archivo { position: relative; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.boton-archivo input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.resumen-copia { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--borde); }
+.resumen-copia ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 0.92rem; }
